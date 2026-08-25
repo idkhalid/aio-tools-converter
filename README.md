@@ -5,88 +5,88 @@
 <h1 align="center">AIO Converter</h1>
 
 <p align="center">
-  Platform konversi file modular dengan pemrosesan lokal di browser dan job server sementara untuk format yang membutuhkan aplikasi native.
+  A modular file-conversion platform with local browser processing and short-lived server jobs for formats that require native applications.
 </p>
 
 <p align="center">
-  <a href="#fitur-phase-1">Fitur</a> ·
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#arsitektur">Arsitektur</a> ·
-  <a href="#testing">Testing</a> ·
+  <a href="#phase-1-features">Features</a> &middot;
+  <a href="#quick-start">Quick start</a> &middot;
+  <a href="#architecture">Architecture</a> &middot;
+  <a href="#testing">Testing</a> &middot;
   <a href="#deployment">Deployment</a>
 </p>
 
-> **Status: Phase 1 / beta.** Fondasi aplikasi dan empat reference tool sudah berfungsi. UI/UX masih berupa baseline yang responsif dan keyboard-accessible karena desain final sedang disiapkan di Figma.
+> **Status: Phase 1 / beta.** The application foundation and four Phase 1 tools are functional. The current UI/UX is a responsive, keyboard-accessible baseline while the final design is being prepared in Figma.
 
-## Fitur Phase 1
+## Phase 1 features
 
-| Tool         | Mode pemrosesan  | Batas utama                             | Hasil                  |
-| ------------ | ---------------- | --------------------------------------- | ---------------------- |
-| PNG to JPG   | Lokal di browser | 1–50 file, 50 MiB/file, 200 MiB total   | JPG satuan atau ZIP    |
-| Merge PDF    | Lokal di browser | 2–20 file, 50 MiB/file, 250 MiB total   | Satu PDF sesuai urutan |
-| Video to GIF | Lokal di browser | 1 file, 150 MiB, clip maksimal 30 detik | GIF                    |
-| DOCX to PDF  | Server sementara | 1 file, 50 MiB                          | PDF sekali unduh       |
+| Tool         | Processing mode  | Key limits                              | Output                        |
+| ------------ | ---------------- | --------------------------------------- | ----------------------------- |
+| PNG to JPG   | Local in browser | 1-50 files, 50 MiB/file, 200 MiB total  | Individual JPG files or ZIP   |
+| Merge PDF    | Local in browser | 2-20 files, 50 MiB/file, 250 MiB total  | One PDF in the selected order |
+| Video to GIF | Local in browser | 1 file, 150 MiB, maximum 30-second clip | GIF                           |
+| DOCX to PDF  | Ephemeral server | 1 file, 50 MiB                          | One-time PDF download         |
 
-Semua tool menggunakan registry bertipe yang sama untuk route, metadata, validasi, opsi, limit, privacy badge, dan pemetaan processor. Menambah varian tool tidak mengharuskan membuat ulang halaman dari nol.
+Every tool uses the same strongly typed registry for routes, metadata, validation, options, limits, privacy badges, and processor mappings. New tool variants do not require rebuilding the page from scratch.
 
-## Model privasi
+## Privacy model
 
-AIO Converter memiliki dua jalur eksekusi yang ditampilkan secara eksplisit kepada pengguna:
+AIO Converter exposes two processing paths clearly to users:
 
-- **`LOCAL_ONLY`** — PNG to JPG, Merge PDF, dan Video to GIF berjalan di Web Worker browser. File tidak dikirim ke API dan tidak memiliki fallback upload tersembunyi.
-- **`SERVER_EPHEMERAL`** — DOCX to PDF memakai API Go dan LibreOffice runner terisolasi. Input/output disimpan di tmpfs, metadata job hanya berada di memori, output hanya dapat diunduh sekali, dan data dibersihkan setelah selesai, dibatalkan, gagal, timeout, shutdown, atau TTL berakhir.
+- **`LOCAL_ONLY`** - PNG to JPG, Merge PDF, and Video to GIF run in browser Web Workers. Files are never sent to the API, and there is no hidden upload fallback.
+- **`SERVER_EPHEMERAL`** - DOCX to PDF uses the Go API and an isolated LibreOffice runner. Inputs and outputs live in tmpfs, job metadata exists only in memory, output can be downloaded only once, and data is removed after completion, cancellation, failure, timeout, shutdown, or TTL expiry.
 
-Response file server menggunakan `Cache-Control: private, no-store`. Nama file asli tidak disimpan sebagai metadata job dan binary pengguna tidak ditulis ke database, object storage, analytics, atau log aplikasi.
+Server file responses use `Cache-Control: private, no-store`. Original filenames are not stored in job metadata, and user binaries are never written to a database, object storage, analytics, or application logs.
 
-## Arsitektur
+## Architecture
 
 ```mermaid
 flowchart LR
     U[Browser] --> R[Typed tool registry + ToolShell]
     R -->|LOCAL_ONLY| W[Dedicated Web Worker]
-    W --> B[Blob atau ZIP download]
+    W --> B[Blob or ZIP download]
     R -->|SERVER_EPHEMERAL| A[Go job API]
     A -->|Unix socket| O[Isolated LibreOffice runner]
     O --> D[One-time PDF download]
 ```
 
-| Lapisan          | Teknologi                                | Tanggung jawab                                                       |
-| ---------------- | ---------------------------------------- | -------------------------------------------------------------------- |
-| Web              | Astro 7, React 19, Tailwind CSS 4        | Static routes, generic tool shell, SEO, dan aksesibilitas            |
-| Browser engine   | Web Worker, pdf-lib, ffmpeg.wasm, fflate | Konversi lokal, progress, cancel, dan output download                |
-| API              | Go 1.24                                  | Upload streaming, lifecycle job, SSE, one-time download, dan cleanup |
-| Office runner    | LibreOffice dalam container              | Konversi DOCX tanpa network dan tanpa persistent storage             |
-| Shared contracts | TypeScript workspace packages            | Registry, validasi, processor contract, dan helper lintas aplikasi   |
+| Layer            | Technology                               | Responsibility                                                        |
+| ---------------- | ---------------------------------------- | --------------------------------------------------------------------- |
+| Web              | Astro 7, React 19, Tailwind CSS 4        | Static routes, generic tool shell, SEO, and accessibility             |
+| Browser engine   | Web Worker, pdf-lib, ffmpeg.wasm, fflate | Local conversion, progress, cancellation, and output downloads        |
+| API              | Go 1.24                                  | Streaming uploads, job lifecycle, SSE, one-time download, and cleanup |
+| Office runner    | LibreOffice in a container               | DOCX conversion without network access or persistent storage          |
+| Shared contracts | TypeScript workspace packages            | Registry, validation, processor contracts, and cross-app helpers      |
 
-Struktur utama repository:
+Main repository structure:
 
 ```text
 apps/
-  web/                 Astro frontend dan Playwright E2E
-  api/                 Go API, office runner, dan integration test
+  web/                 Astro frontend and Playwright E2E
+  api/                 Go API, office runner, and integration tests
 packages/
-  tool-core/           Kontrak dan validasi bersama
-  tool-registry/       Definisi tool dan processor manifest
-  browser-processors/  Image, PDF, FFmpeg, dan ZIP processors
-  server-contracts/    Client job API dan SSE contract
-  ui/                  Generic ToolShell dan state machine
-  shared/              Helper binary, MIME, dan filename
-docs/                  Arsitektur, development, dan deployment
+  tool-core/           Shared contracts and validation
+  tool-registry/       Tool definitions and processor manifest
+  browser-processors/  Image, PDF, FFmpeg, and ZIP processors
+  server-contracts/    Job API client and SSE contract
+  ui/                  Generic ToolShell and state machine
+  shared/              Binary, MIME, and filename helpers
+docs/                  Architecture, development, and deployment guides
 ```
 
-Penjelasan alur dan invariant keamanan tersedia di [docs/architecture.md](docs/architecture.md).
+See [docs/architecture.md](docs/architecture.md) for processing flows and security invariants.
 
 ## Quick start
 
-### Prasyarat
+### Prerequisites
 
-- Node.js 22.14 atau lebih baru
-- Corepack dan pnpm 11
-- Go 1.24 atau lebih baru
-- Docker Compose untuk menjalankan DOCX to PDF
-- Chromium Playwright untuk E2E
+- Node.js 22.14 or newer
+- Corepack and pnpm 11
+- Go 1.24 or newer
+- Docker Compose for DOCX to PDF
+- Playwright Chromium for E2E testing
 
-### Frontend dan tool lokal
+### Frontend and local tools
 
 ```bash
 corepack enable
@@ -94,58 +94,58 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Buka <http://localhost:4321>. Tiga tool `LOCAL_ONLY` langsung dapat digunakan tanpa backend. Asset FFmpeg dibuat otomatis dari dependency saat `dev` atau `build` dan tidak perlu disimpan di Git.
+Open <http://localhost:4321>. The three `LOCAL_ONLY` tools work without a backend. FFmpeg assets are generated automatically from the dependency during `dev` or `build` and do not need to be stored in Git.
 
-### Stack lengkap
+### Full stack
 
-Salin `.env.example` menjadi `.env` hanya jika ingin mengganti konfigurasi default, lalu jalankan:
+Copy `.env.example` to `.env` only when you need to override the default configuration, then run:
 
 ```bash
 pnpm dev:docker
 ```
 
-Perintah tersebut menjalankan frontend dan membangun stack API + LibreOffice runner. API hanya dipublikasikan ke `127.0.0.1:8080`; office runner tidak memiliki port publik maupun akses network.
+This command starts the frontend and builds the API plus LibreOffice runner stack. The API is published only on `127.0.0.1:8080`; the office runner has no public port or network access.
 
-Panduan development lebih lengkap tersedia di [docs/development.md](docs/development.md).
+See [docs/development.md](docs/development.md) for the complete development guide.
 
-## Perintah utama
+## Commands
 
-| Perintah            | Fungsi                                         |
-| ------------------- | ---------------------------------------------- |
-| `pnpm dev`          | Menjalankan frontend Astro                     |
-| `pnpm dev:api`      | Menjalankan backend melalui Docker Compose     |
-| `pnpm dev:docker`   | Menjalankan frontend dan backend bersama-sama  |
-| `pnpm build`        | Build seluruh workspace dan memeriksa build Go |
-| `pnpm lint`         | Menjalankan ESLint dan `go vet`                |
-| `pnpm typecheck`    | Memeriksa TypeScript dan Astro                 |
-| `pnpm test`         | Menjalankan unit test JavaScript dan test Go   |
-| `pnpm test:e2e`     | Menjalankan Playwright E2E                     |
-| `pnpm format:check` | Memeriksa format source                        |
+| Command             | Purpose                                               |
+| ------------------- | ----------------------------------------------------- |
+| `pnpm dev`          | Start the Astro frontend                              |
+| `pnpm dev:api`      | Start the backend through Docker Compose              |
+| `pnpm dev:docker`   | Start the frontend and backend together               |
+| `pnpm build`        | Build every workspace package and verify the Go build |
+| `pnpm lint`         | Run ESLint and `go vet`                               |
+| `pnpm typecheck`    | Check TypeScript and Astro                            |
+| `pnpm test`         | Run JavaScript unit tests and Go tests                |
+| `pnpm test:e2e`     | Run the Playwright E2E suite                          |
+| `pnpm format:check` | Check source formatting                               |
 
-## Konfigurasi
+## Configuration
 
-Konfigurasi lokal berada di `.env`. Template yang aman untuk dicommit tersedia di [.env.example](.env.example).
+Local configuration belongs in `.env`. A safe, commit-ready template is available at [.env.example](.env.example).
 
-| Variable                  | Default development     | Kegunaan                             |
-| ------------------------- | ----------------------- | ------------------------------------ |
-| `PUBLIC_APP_NAME`         | `AIO Converter`         | Nama aplikasi pada UI dan metadata   |
-| `PUBLIC_APP_URL`          | `http://localhost:4321` | Origin canonical frontend            |
-| `PUBLIC_API_URL`          | `http://localhost:8080` | Base URL job API                     |
-| `API_ALLOWED_ORIGINS`     | `http://localhost:4321` | Origin frontend yang diizinkan       |
-| `API_JOB_TTL`             | `15m`                   | Batas hidup maksimal job sementara   |
-| `API_MAX_CONCURRENT_JOBS` | `1`                     | Jumlah job office aktif per instance |
+| Variable                  | Development default     | Purpose                                 |
+| ------------------------- | ----------------------- | --------------------------------------- |
+| `PUBLIC_APP_NAME`         | `AIO Converter`         | Application name in the UI and metadata |
+| `PUBLIC_APP_URL`          | `http://localhost:4321` | Canonical frontend origin               |
+| `PUBLIC_API_URL`          | `http://localhost:8080` | Job API base URL                        |
+| `API_ALLOWED_ORIGINS`     | `http://localhost:4321` | Allowed frontend origin                 |
+| `API_JOB_TTL`             | `15m`                   | Maximum lifetime of an ephemeral job    |
+| `API_MAX_CONCURRENT_JOBS` | `1`                     | Active office jobs per instance         |
 
-Jangan commit `.env`, token processor, credential, atau file pengguna. Seluruh variable backend dan limit tersedia di `.env.example`.
+Do not commit `.env`, processor tokens, credentials, or user files. All backend variables and limits are documented in `.env.example`.
 
 ## Testing
 
-Pasang browser Playwright sekali pada mesin development:
+Install the Playwright browser once on each development machine:
 
 ```bash
 pnpm exec playwright install chromium
 ```
 
-Jalankan quality gates sebelum push atau membuat release:
+Run all quality gates before pushing or creating a release:
 
 ```bash
 pnpm format:check
@@ -156,42 +156,42 @@ pnpm build
 pnpm test:e2e
 ```
 
-`pnpm test:e2e` membutuhkan Docker untuk smoke test DOCX to PDF. Audit browser-only dapat dijalankan dengan `PLAYWRIGHT_SKIP_API_SERVER=1`, tetapi hasil tersebut tidak menggantikan validasi stack container.
+`pnpm test:e2e` requires Docker for the DOCX-to-PDF smoke test. Set `PLAYWRIGHT_SKIP_API_SERVER=1` for a browser-only audit, but that mode does not replace container-stack validation.
 
-E2E otomatis Phase 1 berfokus pada Chromium desktop/mobile. Safari dan Firefox tetap perlu diuji manual sebelum menyatakan dukungan produksi lintas-browser.
+Phase 1 automated E2E coverage targets desktop and mobile Chromium. Safari and Firefox still require manual testing before claiming production-grade cross-browser support.
 
 ## Deployment
 
-Frontend adalah output statis di `apps/web/dist` dan dapat di-host di Cloudflare Pages. API serta LibreOffice runner harus ditempatkan pada host container terpisah yang mendukung tmpfs, resource limits, Unix socket, dan reverse proxy HTTPS.
+The frontend builds to static output in `apps/web/dist` and can be hosted on Cloudflare Pages. The API and LibreOffice runner must run on a separate container host that supports tmpfs, resource limits, Unix sockets, and an HTTPS reverse proxy.
 
-Untuk production build, isi `PUBLIC_APP_URL` dan `PUBLIC_API_URL` sebelum proses build. CSP dan `connect-src` dibentuk pada build time. Instruksi header, origin, metrics, cleanup, dan checklist produksi tersedia di [docs/deployment.md](docs/deployment.md).
+Set `PUBLIC_APP_URL` and `PUBLIC_API_URL` before a production build. CSP and `connect-src` are generated at build time. See [docs/deployment.md](docs/deployment.md) for headers, origins, metrics, cleanup rules, and the production checklist.
 
-## Menambah tool
+## Adding a tool
 
-1. Tambahkan definisi dan limit tool ke `packages/tool-registry`.
-2. Gunakan processor/preset yang sudah ada atau implementasikan processor baru sesuai kontrak `tool-core`.
-3. Daftarkan pemetaan processor pada manifest.
-4. Tambahkan help content, unit test, dan E2E untuk alur penting.
+1. Add the tool definition and limits to `packages/tool-registry`.
+2. Reuse an existing processor or preset, or implement a new processor that follows the `tool-core` contract.
+3. Register the processor mapping in the manifest.
+4. Add help content, unit tests, and E2E coverage for critical flows.
 
-Route, metadata, privacy badge, validasi awal, opsi, dan related tools akan mengikuti registry. Detailnya ada di [docs/architecture.md](docs/architecture.md#menambah-tool).
+Routes, metadata, privacy badges, initial validation, options, and related tools are derived from the registry. See [docs/architecture.md](docs/architecture.md) for details.
 
-## Batasan saat ini
+## Current limitations
 
-- UI masih berupa fondasi visual dasar agar mudah disesuaikan setelah desain Figma siap.
-- Video to GIF memakai WebAssembly dan dapat membutuhkan RAM besar pada perangkat dengan spesifikasi rendah.
-- Fidelity DOCX mengikuti font serta kemampuan LibreOffice di image runner; hasil tidak dijamin identik dengan Microsoft Word.
-- Full E2E jalur DOCX membutuhkan Docker dan LibreOffice container yang sehat.
-- Seluruh tool masih berstatus beta dan belum diposisikan sebagai layanan production-ready.
+- The UI is intentionally a basic visual foundation so it can be adapted once the Figma design is ready.
+- Video to GIF uses WebAssembly and may require significant memory on low-end devices.
+- DOCX fidelity depends on the fonts and LibreOffice capabilities in the runner image; output is not guaranteed to match Microsoft Word exactly.
+- Full DOCX E2E testing requires a healthy Docker and LibreOffice container stack.
+- Every tool is still marked beta, and the project is not positioned as a production-ready service.
 
-## Lisensi dan release gate
+## License and release gate
 
-Source AIO Converter saat ini berstatus **`UNLICENSED`**. Repository publik tidak otomatis menjadikannya open source dan belum memberikan izin untuk memakai, memodifikasi, atau mendistribusikan source ini.
+The AIO Converter source is currently **`UNLICENSED`**. Publishing the repository does not automatically make it open source or grant permission to use, modify, or redistribute the source.
 
-Runtime prebuilt `@ffmpeg/core` yang digunakan oleh Video to GIF mendeklarasikan **GPL-2.0-or-later**. Sebelum rilis publik atau komersial, pemilik proyek perlu memenuhi kewajiban distribusinya atau mengganti runtime tersebut dengan build LGPL-only yang telah diaudit. Lihat [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) untuk inventaris dan catatan compliance.
+The prebuilt `@ffmpeg/core` runtime used by Video to GIF declares **GPL-2.0-or-later**. Generated FFmpeg runtime assets are gitignored and are not included in this source-only repository. Before publicly deploying or distributing a built application that includes the runtime, the project owner must either meet its distribution obligations or replace it with an audited LGPL-only build. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the dependency inventory and compliance notes.
 
-## Dokumentasi
+## Documentation
 
-- [Arsitektur dan model privasi](docs/architecture.md)
-- [Setup development dan kompatibilitas browser](docs/development.md)
-- [Deployment dan checklist produksi](docs/deployment.md)
+- [Architecture and privacy model](docs/architecture.md)
+- [Development setup and browser compatibility](docs/development.md)
+- [Deployment and production checklist](docs/deployment.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
