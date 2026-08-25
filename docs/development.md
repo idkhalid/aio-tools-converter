@@ -72,7 +72,7 @@ Target build Astro saat ini mencakup Chrome/Edge 111, Firefox 114, dan Safari/iO
 
 ## Runtime FFmpeg
 
-Core FFmpeg dimuat secara lazy saat tool Video to GIF dijalankan. Script web menyalin entry ESM yang cocok dengan worker `@ffmpeg/ffmpeg` dan meng-gzip WASM dari dependency ke `apps/web/public/wasm` sebelum dev/build. Browser worker baru mengambil dan membuka `.wasm.gz` saat tool dijalankan; raw WASM 32 MiB tidak masuk output deployment. Folder hasil salinan tidak perlu disimpan di Git.
+Core FFmpeg dimuat secara lazy saat tool Video to GIF dijalankan. Vite menerbitkan entry ESM `@ffmpeg/core` sebagai asset build yang dapat di-import worker, sedangkan script web hanya meng-gzip WASM dari dependency ke `apps/web/public/wasm` sebelum dev/build. Browser worker baru mengambil dan membuka `.wasm.gz` saat tool dijalankan; loader menerima byte gzip maupun WASM yang sudah didekode transparan oleh development server. Raw WASM 32 MiB tidak masuk output deployment dan folder hasil generasi tidak perlu disimpan di Git.
 
 ## Batas Phase 1
 

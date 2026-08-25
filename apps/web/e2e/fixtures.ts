@@ -1,4 +1,4 @@
-import type { Download, Page } from "@playwright/test";
+import { expect, type Download, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { deflateSync } from "node:zlib";
@@ -144,6 +144,11 @@ export function trackJobRequests(page: Page): string[] {
     if (url.pathname.startsWith("/v1/jobs")) requests.push(`${request.method()} ${url.pathname}`);
   });
   return requests;
+}
+
+export async function waitForToolHydration(page: Page): Promise<void> {
+  await expect(page.locator("astro-island")).toHaveCount(1);
+  await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
 }
 
 export async function attachSyntheticWebM(page: Page): Promise<void> {

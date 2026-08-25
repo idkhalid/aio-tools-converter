@@ -19,7 +19,7 @@ PUBLIC_API_URL=https://api.example.com
 
 File `public/_headers` mengaktifkan header isolasi lintas-origin yang dibutuhkan runtime worker/FFmpeg serta baseline security headers. Verifikasi header tersebut juga pada preview deployment sebelum menjalankan media tool.
 
-Prebuild menyimpan FFmpeg WASM sebagai `ffmpeg-core.wasm.gz`; browser worker membukanya secara lazy menjadi Blob URL. Ini menjaga raw runtime 32 MiB di luar output dan membuat asset deploy tetap di bawah batas satu file Cloudflare Pages. Periksa ukuran hasil build lagi setiap kali versi FFmpeg berubah.
+Prebuild menyimpan FFmpeg WASM sebagai `ffmpeg-core.wasm.gz`; browser worker membukanya secara lazy menjadi Blob URL. Core JavaScript diterbitkan Vite sebagai asset `_astro/ffmpeg-core-*.js`, bukan disalin ke folder `public`. Ini menjaga raw runtime 32 MiB di luar output dan membuat asset deploy tetap di bawah batas satu file Cloudflare Pages. Periksa ukuran hasil build lagi setiap kali versi FFmpeg berubah.
 
 Astro menghasilkan CSP dengan hash untuk script hydration dan menggabungkan `PUBLIC_API_URL` ke `connect-src` pada saat build. Karena itu URL production harus diisi sebelum build, bukan diganti setelah folder `dist` dibuat. Build dengan `CI=true`, `CF_PAGES=1`, atau `AIO_REQUIRE_PUBLIC_ORIGINS=1` akan gagal bila `PUBLIC_APP_URL`/`PUBLIC_API_URL` belum diatur, sehingga canonical atau API localhost tidak bisa terbit diam-diam.
 

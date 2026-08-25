@@ -6,6 +6,7 @@ import {
   syntheticPDF,
   syntheticPNG,
   trackJobRequests,
+  waitForToolHydration,
 } from "./fixtures";
 
 const uploadInput = (page: Page) => page.getByTestId("drop-zone").locator('input[type="file"]');
@@ -15,6 +16,7 @@ test("batch PNG conversion downloads JPEGs and a real ZIP without server jobs", 
 }) => {
   const jobRequests = trackJobRequests(page);
   await page.goto("/image/png-to-jpg");
+  await waitForToolHydration(page);
   await uploadInput(page).setInputFiles([
     {
       name: "red.png",
@@ -70,6 +72,7 @@ test("merge PDF preserves the reordered page sequence and never creates a server
     [403, 503],
   ]);
   await page.goto("/pdf/merge-pdf");
+  await waitForToolHydration(page);
   await uploadInput(page).setInputFiles([
     { name: "beta.pdf", mimeType: "application/pdf", buffer: beta },
     { name: "alpha.pdf", mimeType: "application/pdf", buffer: alpha },
@@ -110,6 +113,7 @@ test("video to GIF can be canceled, retried, and downloaded without a server job
   test.setTimeout(240_000);
   const jobRequests = trackJobRequests(page);
   await page.goto("/video/video-to-gif");
+  await waitForToolHydration(page);
   await attachSyntheticWebM(page);
   await page.getByLabel("Clip duration").fill("1");
   await page.getByLabel("Frames per second").fill("5");

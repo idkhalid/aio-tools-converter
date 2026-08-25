@@ -211,7 +211,7 @@ func TestManagerBoundsAdmissionAndExpiresOutput(t *testing.T) {
 		deadline := time.Now().Add(time.Second)
 		for time.Now().Before(deadline) {
 			if _, err := m.Get(id); errors.Is(err, ErrNotFound) {
-				assertEmptyDir(t, cfg.Root)
+				assertEventuallyEmptyDir(t, cfg.Root)
 				return
 			}
 			time.Sleep(5 * time.Millisecond)
@@ -328,4 +328,20 @@ func assertEmptyDir(t *testing.T, root string) {
 	if len(entries) != 0 {
 		t.Fatalf("job artifacts remain: %v", entries)
 	}
+}
+
+func assertEventuallyEmptyDir(t *testing.T, root string) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) == 0 {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	assertEmptyDir(t, root)
 }

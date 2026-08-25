@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { readDownload, syntheticDOCX } from "./fixtures";
+import { readDownload, syntheticDOCX, waitForToolHydration } from "./fixtures";
 
 test("DOCX converts through the ephemeral API and downloads a complete PDF", async ({
   page,
@@ -31,6 +31,7 @@ test("DOCX converts through the ephemeral API and downloads a complete PDF", asy
   });
 
   await page.goto("/document/docx-to-pdf");
+  await waitForToolHydration(page);
   await page.getByTestId("drop-zone").locator('input[type="file"]').setInputFiles({
     name: "synthetic.docx",
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

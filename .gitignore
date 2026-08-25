@@ -79,3 +79,6 @@ yarn-error.log*
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+/docs/AGENTS.md
+UPDATE.md

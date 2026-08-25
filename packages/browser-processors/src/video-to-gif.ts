@@ -29,11 +29,21 @@ async function inflateWasmURL(gzipURL: string, signal: AbortSignal): Promise<str
     );
   }
 
-  const compressed = new Uint8Array(await response.arrayBuffer());
+  const downloaded = new Uint8Array(await response.arrayBuffer());
   if (signal.aborted) throw canceledError();
   try {
-    const { gunzipSync } = await import("fflate");
-    const wasm = gunzipSync(compressed);
+    // Some development servers transparently decode `.gz` responses after
+    // adding Content-Encoding: gzip. Production hosts may return the stored
+    // gzip bytes directly, so accept either representation.
+    const isWasm =
+      downloaded[0] === 0x00 &&
+      downloaded[1] === 0x61 &&
+      downloaded[2] === 0x73 &&
+      downloaded[3] === 0x6d;
+    const wasm = isWasm ? downloaded : (await import("fflate")).gunzipSync(downloaded);
+    if (wasm[0] !== 0x00 || wasm[1] !== 0x61 || wasm[2] !== 0x73 || wasm[3] !== 0x6d) {
+      throw new Error("Invalid WebAssembly signature");
+    }
     return URL.createObjectURL(new Blob([asExactArrayBuffer(wasm)], { type: "application/wasm" }));
   } catch {
     throw new ToolError(

@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -11,7 +11,7 @@ const targetDirectory = join(appDirectory, "public", "wasm", "ffmpeg");
 const gzipAsync = promisify(gzip);
 
 await mkdir(targetDirectory, { recursive: true });
-await copyFile(join(sourceDirectory, "ffmpeg-core.js"), join(targetDirectory, "ffmpeg-core.js"));
+await rm(join(targetDirectory, "ffmpeg-core.js"), { force: true });
 const wasm = await readFile(join(sourceDirectory, "ffmpeg-core.wasm"));
 const compressedWasm = await gzipAsync(wasm, { level: 9 });
 await writeFile(join(targetDirectory, "ffmpeg-core.wasm.gz"), compressedWasm);
