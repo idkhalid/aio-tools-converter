@@ -1,0 +1,12 @@
+.astro/
+.corepack/
+.pnpm-store/
+.tmp/
+blob-report/
+coverage/
+dist/
+node_modules/
+playwright-report/
+test-results/
+apps/web/public/wasm/
+pnpm-lock.yaml

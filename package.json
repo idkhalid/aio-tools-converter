@@ -1,0 +1,46 @@
+{
+  "name": "aio-converter",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "packageManager": "pnpm@11.23.0",
+  "engines": {
+    "node": ">=22.14.0",
+    "pnpm": ">=11.0.0"
+  },
+  "scripts": {
+    "dev": "corepack pnpm dev:web",
+    "dev:web": "corepack pnpm --filter @aio-converter/web dev",
+    "dev:api": "docker compose up --build api",
+    "dev:docker": "concurrently --kill-others --names web,backend --prefix-colors cyan,magenta \"corepack pnpm dev:web\" \"corepack pnpm dev:api\"",
+    "preview": "corepack pnpm --filter @aio-converter/web preview",
+    "build": "corepack pnpm -r --if-present build && go -C apps/api build ./...",
+    "lint": "eslint . --max-warnings=0 && go -C apps/api vet ./...",
+    "lint:js": "eslint . --max-warnings=0",
+    "lint:api": "go -C apps/api vet ./...",
+    "typecheck": "corepack pnpm -r --if-present typecheck && tsc -p tsconfig.tooling.json",
+    "test": "corepack pnpm test:unit && corepack pnpm test:api",
+    "test:unit": "corepack pnpm -r --if-present test",
+    "test:api": "go -C apps/api test ./...",
+    "pretest:e2e": "corepack pnpm --filter @aio-converter/web build",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^22.20.1",
+    "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
+    "eslint": "^10.9.0",
+    "globals": "^17.11.0",
+    "prettier": "^3.9.6",
+    "prettier-plugin-astro": "^0.14.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.1.10"
+  }
+}

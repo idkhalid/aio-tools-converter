@@ -1,0 +1,15 @@
+.git/
+.corepack/
+.pnpm-store/
+.tmp/
+**/node_modules/
+**/.astro/
+**/.vite/
+**/coverage/
+**/dist/
+blob-report/
+playwright-report/
+test-results/
+.env
+.env.*
+*.log

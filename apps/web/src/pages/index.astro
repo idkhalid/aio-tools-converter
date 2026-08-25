@@ -1,0 +1,70 @@
+---
+import { getRoutableTools } from "@aio-converter/tool-registry";
+import ToolCard from "../components/ToolCard.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { appConfig } from "../lib/app-config";
+
+const tools = getRoutableTools();
+---
+
+<BaseLayout
+  title={`${appConfig.name} — Private file conversion tools`}
+  description="Convert images, PDFs, videos, and documents with local-first processing and transparent privacy."
+  canonicalPath="/"
+>
+  <section class="relative overflow-hidden border-b border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6 sm:py-28">
+      <span class="inline-flex rounded-full bg-sky-100 px-3 py-1 text-sm font-semibold text-sky-800"
+        >Local-first file tools</span
+      >
+      <h1
+        class="mx-auto mt-6 max-w-4xl text-4xl font-black tracking-tight text-slate-950 sm:text-6xl"
+      >
+        Useful converters, with clear privacy
+      </h1>
+      <p class="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-600">
+        Browser-capable tools keep files on your device. Server tools use isolated, short-lived jobs
+        and say so before upload.
+      </p>
+      <a href="#tools" class="primary-button mt-8 px-6 py-3">Browse tools</a>
+    </div>
+  </section>
+
+  <section id="tools" class="mx-auto max-w-6xl scroll-mt-8 px-4 py-16 sm:px-6">
+    <div class="max-w-2xl">
+      <h2 class="text-3xl font-bold tracking-tight text-slate-950">Phase 1 tools</h2>
+      <p class="mt-3 text-slate-600">
+        Four reference converters cover local image, PDF, media, and temporary server processing.
+      </p>
+    </div>
+    <div class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {tools.map((tool) => <ToolCard tool={tool} />)}
+    </div>
+  </section>
+
+  <section class="mx-auto max-w-6xl px-4 sm:px-6">
+    <div class="grid gap-6 rounded-3xl bg-slate-900 p-8 text-white md:grid-cols-3">
+      <div>
+        <h2 class="font-bold">Local where practical</h2><p
+          class="mt-2 text-sm leading-6 text-slate-300"
+        >
+          Image, PDF, and media reference tools run in isolated browser workers.
+        </p>
+      </div>
+      <div>
+        <h2 class="font-bold">No silent fallback</h2><p
+          class="mt-2 text-sm leading-6 text-slate-300"
+        >
+          A local tool will never upload your file if the browser cannot process it.
+        </p>
+      </div>
+      <div>
+        <h2 class="font-bold">Automatic cleanup</h2><p
+          class="mt-2 text-sm leading-6 text-slate-300"
+        >
+          Temporary server jobs are canceled, expired, and deleted by design.
+        </p>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

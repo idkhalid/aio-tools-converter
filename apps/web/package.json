@@ -1,0 +1,39 @@
+{
+  "name": "@aio-converter/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/copy-ffmpeg-assets.mjs",
+    "dev": "cross-env ASTRO_TELEMETRY_DISABLED=1 astro dev",
+    "prebuild": "node scripts/copy-ffmpeg-assets.mjs",
+    "build": "cross-env ASTRO_TELEMETRY_DISABLED=1 astro build",
+    "preview": "node scripts/preview.mjs",
+    "lint": "eslint src scripts e2e --max-warnings=0",
+    "typecheck": "cross-env ASTRO_TELEMETRY_DISABLED=1 astro check",
+    "test": "vitest run --passWithNoTests --exclude \"e2e/**\"",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@aio-converter/browser-processors": "workspace:*",
+    "@aio-converter/server-contracts": "workspace:*",
+    "@aio-converter/shared": "workspace:*",
+    "@aio-converter/tool-core": "workspace:*",
+    "@aio-converter/tool-registry": "workspace:*",
+    "@aio-converter/ui": "workspace:*",
+    "@astrojs/react": "^6.0.4",
+    "@astrojs/sitemap": "^3.7.3",
+    "@ffmpeg/core": "^0.12.10",
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^7.2.6",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "vite": "^8.0.13"
+  }
+}

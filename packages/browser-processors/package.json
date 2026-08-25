@@ -1,0 +1,21 @@
+{
+  "name": "@aio-converter/browser-processors",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aio-converter/shared": "workspace:*",
+    "@aio-converter/tool-core": "workspace:*",
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "fflate": "^0.8.2",
+    "pdf-lib": "^1.17.1"
+  }
+}

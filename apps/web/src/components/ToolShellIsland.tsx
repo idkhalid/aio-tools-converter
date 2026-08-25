@@ -1,0 +1,74 @@
+import { WorkerJobExecutor } from "@aio-converter/browser-processors";
+import { ServerJobExecutor } from "@aio-converter/server-contracts";
+import type { JobExecutor, ToolDefinition } from "@aio-converter/tool-core";
+import { ToolShell } from "@aio-converter/ui";
+import { useMemo } from "react";
+import { appConfig } from "../lib/app-config";
+
+function localExecutor(tool: ToolDefinition): JobExecutor {
+  const timeoutMs = tool.timeoutMs ?? 120_000;
+  const workerOptions = {
+    timeoutMs,
+    ...(tool.processorPreset ? { processorPreset: tool.processorPreset } : {}),
+  };
+  switch (tool.processor) {
+    case "image-convert":
+      return new WorkerJobExecutor({
+        ...workerOptions,
+        createWorker: () =>
+          new Worker(new URL("../workers/image-convert.worker.ts", import.meta.url), {
+            type: "module",
+            name: "image-convert",
+          }),
+      });
+    case "pdf-merge":
+      return new WorkerJobExecutor({
+        ...workerOptions,
+        createWorker: () =>
+          new Worker(new URL("../workers/pdf-merge.worker.ts", import.meta.url), {
+            type: "module",
+            name: "pdf-merge",
+          }),
+      });
+    case "ffmpeg-video-to-gif":
+      return new WorkerJobExecutor({
+        ...workerOptions,
+        createWorker: () =>
+          new Worker(new URL("../workers/video-to-gif.worker.ts", import.meta.url), {
+            type: "module",
+            name: "video-to-gif",
+          }),
+      });
+    default:
+      throw new Error(`No browser executor is registered for ${tool.processor}`);
+  }
+}
+
+function toolExecutor(tool: ToolDefinition): JobExecutor {
+  if (tool.execution === "LOCAL_ONLY") return localExecutor(tool);
+  if (tool.execution === "SERVER_EPHEMERAL") {
+    return new ServerJobExecutor({
+      apiBaseURL: appConfig.apiURL,
+      toolId: tool.id,
+      timeoutMs: tool.timeoutMs ?? 10 * 60_000,
+    });
+  }
+  throw new Error("REMOTE_FETCH tools are not part of Phase 1.");
+}
+
+function archiveExecutor(): JobExecutor {
+  return new WorkerJobExecutor({
+    timeoutMs: 120_000,
+    createWorker: () =>
+      new Worker(new URL("../workers/archive.worker.ts", import.meta.url), {
+        type: "module",
+        name: "archive-zip",
+      }),
+  });
+}
+
+export function ToolShellIsland({ tool }: { tool: ToolDefinition }) {
+  const executor = useMemo(() => toolExecutor(tool), [tool]);
+  const archive = useMemo(archiveExecutor, []);
+  return <ToolShell tool={tool} executor={executor} archiveExecutor={archive} />;
+}

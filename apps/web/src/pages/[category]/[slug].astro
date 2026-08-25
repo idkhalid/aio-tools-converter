@@ -1,0 +1,113 @@
+---
+import type { ToolDefinition } from "@aio-converter/tool-core";
+import { getRelatedTools, getRoutableTools } from "@aio-converter/tool-registry";
+import { formatBytes } from "@aio-converter/shared";
+import type { GetStaticPaths } from "astro";
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import ToolCard from "../../components/ToolCard.astro";
+import { ToolShellIsland } from "../../components/ToolShellIsland";
+import { toolHelpById } from "../../content/tool-help";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+export const getStaticPaths = (() =>
+  getRoutableTools().map((tool) => ({
+    params: { category: tool.category, slug: tool.slug },
+    props: { tool },
+  }))) satisfies GetStaticPaths;
+
+const { tool } = Astro.props as { tool: ToolDefinition };
+const related = getRelatedTools(tool);
+const help = toolHelpById[tool.id];
+if (!help) throw new Error(`Missing help content for ${tool.id}`);
+const fileCount =
+  tool.minFiles === tool.maxFiles ? `${tool.minFiles}` : `${tool.minFiles}–${tool.maxFiles}`;
+---
+
+<BaseLayout
+  title={tool.seo.title}
+  description={tool.seo.description}
+  canonicalPath={tool.seo.canonicalPath}
+>
+  <div class="mx-auto max-w-6xl px-4 pt-8 sm:px-6">
+    <Breadcrumbs
+      items={[{ label: "Home", href: "/" }, { label: tool.category }, { label: tool.title }]}
+    />
+  </div>
+  <header class="mx-auto max-w-4xl px-4 pb-10 pt-12 text-center sm:px-6">
+    <div class="flex items-center justify-center gap-2">
+      <span
+        class="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-sky-800"
+        >{tool.category}</span
+      >
+      {
+        tool.status === "beta" && (
+          <span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+            Beta
+          </span>
+        )
+      }
+    </div>
+    <h1 class="mt-5 text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">{tool.title}</h1>
+    <p class="mx-auto mt-4 max-w-2xl text-lg leading-8 text-slate-600">{tool.shortDescription}</p>
+  </header>
+
+  <section class="px-4 sm:px-6" aria-label={`${tool.title} converter`}>
+    <ToolShellIsland tool={tool} client:load />
+  </section>
+
+  <section class="mx-auto mt-16 max-w-3xl px-4 sm:px-6">
+    <h2 class="text-2xl font-bold text-slate-950">How this tool works</h2>
+    <div class="mt-4 space-y-4 leading-7 text-slate-600">
+      <p>{help.intro}</p>
+      <ol class="list-decimal space-y-2 pl-6">
+        {help.steps.map((step) => <li>{step}</li>)}
+      </ol>
+      <p>
+        {
+          tool.execution === "LOCAL_ONLY"
+            ? "Processing stays inside a disposable browser worker. Canceling or leaving the page terminates that worker and releases its memory."
+            : "Your document is uploaded over HTTPS to an isolated temporary job. The output and input are removed after download or automatic expiry."
+        }
+      </p>
+    </div>
+  </section>
+
+  <section class="mx-auto mt-12 max-w-3xl px-4 sm:px-6">
+    <h2 class="text-2xl font-bold text-slate-950">Capabilities and limits</h2>
+    <dl class="mt-5 grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 sm:grid-cols-3">
+      <div>
+        <dt class="text-sm text-slate-500">Files per job</dt><dd class="mt-1 font-semibold">
+          {fileCount}
+        </dd>
+      </div>
+      <div>
+        <dt class="text-sm text-slate-500">Per-file limit</dt><dd class="mt-1 font-semibold">
+          {formatBytes(tool.maxInputBytes)}
+        </dd>
+      </div>
+      <div>
+        <dt class="text-sm text-slate-500">Privacy mode</dt><dd class="mt-1 font-semibold">
+          {tool.execution.replaceAll("_", " ")}
+        </dd>
+      </div>
+    </dl>
+    <ul class="mt-5 list-disc space-y-2 pl-6 leading-7 text-slate-600">
+      {help.limitations.map((limitation) => <li>{limitation}</li>)}
+    </ul>
+  </section>
+
+  {
+    related.length > 0 && (
+      <section class="mx-auto mt-16 max-w-6xl px-4 sm:px-6" aria-labelledby="related-heading">
+        <h2 id="related-heading" class="text-2xl font-bold text-slate-950">
+          Related tools
+        </h2>
+        <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {related.map((relatedTool) => (
+            <ToolCard tool={relatedTool} />
+          ))}
+        </div>
+      </section>
+    )
+  }
+</BaseLayout>

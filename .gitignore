@@ -1,0 +1,81 @@
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+.corepack/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.envrc
+.direnv/
+
+# Generated frontend assets and build output
+dist/
+.astro/
+.vite/
+.cache/
+.eslintcache
+.wrangler/
+*.tsbuildinfo
+/apps/web/public/wasm/
+
+# Test, coverage, and browser artifacts
+coverage/
+coverage.out
+*.coverprofile
+*.lcov
+*.prof
+*.pprof
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+.playwright-browsers/
+
+# Go build output
+*.test
+/aio-api
+/aio-api.exe
+/aio-office-worker
+/aio-office-worker.exe
+/apps/api/api
+/apps/api/api.exe
+/apps/api/office-worker
+/apps/api/office-worker.exe
+/bin/
+
+# Temporary files and runtime state
+.tmp/
+/tmp/
+*.tmp
+*.temp
+*.pid
+*.pid.lock
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editors and IDEs
+.idea/
+.vscode/
+.fleet/
+*.swp
+*.swo
+*~
+
+# Operating-system metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini

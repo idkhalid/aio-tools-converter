@@ -1,0 +1,83 @@
+name: aio-converter
+
+services:
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+      target: api
+    depends_on:
+      office-runner:
+        condition: service_healthy
+    environment:
+      API_ADDR: ${API_ADDR:-:8080}
+      API_ALLOWED_ORIGINS: ${API_ALLOWED_ORIGINS:-http://localhost:4321}
+      API_DOWNLOAD_TIMEOUT: ${API_DOWNLOAD_TIMEOUT:-10m}
+      API_JOB_ROOT: ${API_JOB_ROOT:-/work/jobs}
+      API_JOB_TTL: ${API_JOB_TTL:-15m}
+      API_MAX_CONCURRENT_JOBS: ${API_MAX_CONCURRENT_JOBS:-1}
+      API_MAX_QUEUED_JOBS: ${API_MAX_QUEUED_JOBS:-8}
+      API_MAX_UPLOAD_BYTES: ${API_MAX_UPLOAD_BYTES:-262144000}
+      API_PROCESS_TIMEOUT: ${API_PROCESS_TIMEOUT:-10m}
+      API_PROCESSOR_SOCKET: ${API_PROCESSOR_SOCKET:-/run/aio-office/office.sock}
+      API_PROCESSOR_TOKEN: ${API_PROCESSOR_TOKEN:-}
+      API_SHUTDOWN_TIMEOUT: ${API_SHUTDOWN_TIMEOUT:-15s}
+    init: true
+    read_only: true
+    user: "10001:10001"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - office-socket:/run/aio-office
+    tmpfs:
+      - /tmp:size=64m,mode=0700,uid=10001,gid=10001,noexec,nosuid,nodev
+      - /work/jobs:size=512m,mode=0700,uid=10001,gid=10001,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 0.5
+    stop_grace_period: 15s
+
+  office-runner:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+      target: office-worker
+    environment:
+      LIBREOFFICE_BIN: ${LIBREOFFICE_BIN:-soffice}
+      OFFICE_JOB_ROOT: ${OFFICE_JOB_ROOT:-/work/office-jobs}
+      OFFICE_MAX_CONCURRENT_JOBS: ${OFFICE_MAX_CONCURRENT_JOBS:-1}
+      OFFICE_MAX_INPUT_BYTES: ${OFFICE_MAX_INPUT_BYTES:-52428800}
+      OFFICE_MAX_OUTPUT_BYTES: ${OFFICE_MAX_OUTPUT_BYTES:-268435456}
+      OFFICE_PROCESS_TIMEOUT: ${OFFICE_PROCESS_TIMEOUT:-10m}
+      OFFICE_PROCESSOR_TOKEN: ${API_PROCESSOR_TOKEN:-}
+      OFFICE_SHUTDOWN_TIMEOUT: ${OFFICE_SHUTDOWN_TIMEOUT:-15s}
+      OFFICE_SOCKET_PATH: ${OFFICE_SOCKET_PATH:-/run/aio-office/office.sock}
+    init: true
+    network_mode: none
+    read_only: true
+    user: "10001:10001"
+    volumes:
+      - office-socket:/run/aio-office
+    tmpfs:
+      - /tmp:size=128m,mode=0700,uid=10001,gid=10001,noexec,nosuid,nodev
+      - /work/office-jobs:size=768m,mode=0700,uid=10001,gid=10001,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 1536m
+    cpus: 2.0
+    stop_grace_period: 15s
+
+volumes:
+  office-socket:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: uid=10001,gid=10001,mode=0770

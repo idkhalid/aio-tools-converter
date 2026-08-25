@@ -1,0 +1,74 @@
+---
+import { appConfig } from "../lib/app-config";
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description: string;
+  canonicalPath: string;
+  imagePath?: string;
+}
+
+const { title, description, canonicalPath, imagePath = "/favicon.svg" } = Astro.props;
+const canonical = new URL(canonicalPath, appConfig.url);
+const image = new URL(imagePath, appConfig.url);
+const appMark = appConfig.name.charAt(0).toUpperCase();
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#0284c7" />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={appConfig.name} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={image} />
+    <meta name="twitter:card" content="summary" />
+    <title>{title}</title>
+  </head>
+  <body class="bg-slate-50 text-slate-950 antialiased">
+    <a
+      href="#main-content"
+      class="fixed left-3 top-3 z-50 -translate-y-24 rounded-lg bg-slate-950 px-4 py-2 text-white focus:translate-y-0"
+      >Skip to content</a
+    >
+    <header class="border-b border-slate-200 bg-white">
+      <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+        <a href="/" class="flex items-center gap-3 font-bold text-slate-950 no-underline">
+          <span
+            class="grid size-9 place-items-center rounded-xl bg-sky-600 text-white"
+            aria-hidden="true">{appMark}</span
+          >
+          <span>{appConfig.name}</span>
+        </a>
+        <nav aria-label="Main navigation">
+          <a
+            href="/#tools"
+            class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >All tools</a
+          >
+        </nav>
+      </div>
+    </header>
+    <main id="main-content" tabindex="-1">
+      <slot />
+    </main>
+    <footer class="mt-20 border-t border-slate-200 bg-white">
+      <div class="mx-auto max-w-6xl px-4 py-8 text-sm text-slate-600 sm:px-6">
+        <p>
+          &copy; {new Date().getFullYear()}
+          {" "}
+          {appConfig.name}. Files are never stored permanently.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
