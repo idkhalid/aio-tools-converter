@@ -1,4 +1,4 @@
-import { asExactArrayBuffer, extensionOf, replaceExtension } from "@aio-converter/shared";
+import { asExactArrayBuffer, deriveOutputFilename, extensionOf } from "@aio-converter/shared";
 import { ToolError, canceledError } from "@aio-converter/tool-core";
 import type { BufferProcessor } from "./protocol";
 
@@ -141,7 +141,7 @@ export function createVideoToGifProcessor(assets: FFmpegAssetURLs): BufferProces
         }
         return [
           {
-            name: replaceExtension(source.name, "gif"),
+            name: deriveOutputFilename(source.name, "gif"),
             mimeType: "image/gif",
             data: result,
           },

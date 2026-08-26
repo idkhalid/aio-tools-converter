@@ -9,10 +9,12 @@ interface DownloadItem extends ProcessOutput {
 export function ResultPanel({
   outputs,
   archiveExecutor,
+  archiveSourceName,
   onReset,
 }: {
   outputs: readonly ProcessOutput[];
   archiveExecutor?: JobExecutor;
+  archiveSourceName?: string;
   onReset(): void;
 }) {
   const [items, setItems] = useState<readonly DownloadItem[]>([]);
@@ -40,7 +42,7 @@ export function ResultPanel({
           files: outputs.map(
             (output) => new File([output.blob], output.name, { type: output.mimeType }),
           ),
-          options: {},
+          options: { archiveSourceName },
         },
         { signal: controller.signal, reportProgress() {} },
       );

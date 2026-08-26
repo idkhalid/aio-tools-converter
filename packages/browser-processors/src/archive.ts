@@ -1,4 +1,4 @@
-import { dedupeFilenames } from "@aio-converter/shared";
+import { dedupeFilenames, deriveConvertedArchiveFilename } from "@aio-converter/shared";
 import { ToolError } from "@aio-converter/tool-core";
 import type { BufferProcessor } from "./protocol";
 
@@ -15,6 +15,19 @@ export const archiveZipProcessor: BufferProcessor = {
     const data = zipSync(entries, { level: 6 });
     if (data.byteLength === 0) throw new ToolError("PROCESSING_FAILED", "ZIP creation failed.");
     context.reportProgress({ stage: "complete", progress: 1, message: "ZIP archive ready" });
-    return [{ name: "converted-files.zip", mimeType: "application/zip", data }];
+    const configuredSourceName = input.options.archiveSourceName;
+    const sourceName =
+      configuredSourceName === undefined
+        ? (input.files[0]?.name ?? "")
+        : typeof configuredSourceName === "string"
+          ? configuredSourceName
+          : "";
+    return [
+      {
+        name: deriveConvertedArchiveFilename(sourceName),
+        mimeType: "application/zip",
+        data,
+      },
+    ];
   },
 };

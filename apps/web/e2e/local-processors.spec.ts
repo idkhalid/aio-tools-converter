@@ -19,7 +19,7 @@ test("batch PNG conversion downloads JPEGs and a real ZIP without server jobs", 
   await waitForToolHydration(page);
   await uploadInput(page).setInputFiles([
     {
-      name: "red.png",
+      name: "photo one.png",
       mimeType: "image/png",
       buffer: syntheticPNG(255, 0, 0, 128),
     },
@@ -41,22 +41,27 @@ test("batch PNG conversion downloads JPEGs and a real ZIP without server jobs", 
   });
   const downloads = page.getByRole("link", { name: "Download", exact: true });
   await expect(downloads).toHaveCount(2);
-  await expect(downloads.nth(0)).toHaveAttribute("download", "red.jpg");
+  await expect(downloads.nth(0)).toHaveAttribute("download", "photo one.jpg");
   await expect(downloads.nth(1)).toHaveAttribute("download", "blue.jpg");
 
+  const expectedFilenames = ["photo one.jpg", "blue.jpg"];
   for (let index = 0; index < 2; index += 1) {
     const downloadPromise = page.waitForEvent("download");
     await downloads.nth(index).click();
-    const jpeg = await readDownload(await downloadPromise);
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe(expectedFilenames[index]);
+    const jpeg = await readDownload(download);
     expect([...jpeg.subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff]);
     expect([...jpeg.subarray(-2)]).toEqual([0xff, 0xd9]);
   }
 
   const archivePromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download all as ZIP" }).click();
-  const archive = await readDownload(await archivePromise);
+  const archiveDownload = await archivePromise;
+  expect(archiveDownload.suggestedFilename()).toBe("photo one-converted.zip");
+  const archive = await readDownload(archiveDownload);
   expect([...archive.subarray(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
-  expect(archive.includes(Buffer.from("red.jpg"))).toBe(true);
+  expect(archive.includes(Buffer.from("photo one.jpg"))).toBe(true);
   expect(archive.includes(Buffer.from("blue.jpg"))).toBe(true);
   expect(archive.subarray(-64).includes(Buffer.from([0x50, 0x4b, 0x05, 0x06]))).toBe(true);
   expect(jobRequests).toEqual([]);
@@ -124,10 +129,12 @@ test("merge PDF preserves the reordered page sequence and never creates a server
     timeout: 30_000,
   });
   const link = page.getByRole("link", { name: "Download", exact: true });
-  await expect(link).toHaveAttribute("download", "merged.pdf");
+  await expect(link).toHaveAttribute("download", "alpha-merged.pdf");
   const downloadPromise = page.waitForEvent("download");
   await link.click();
-  const merged = await readDownload(await downloadPromise);
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("alpha-merged.pdf");
+  const merged = await readDownload(download);
 
   expect(merged.subarray(0, 5).toString("ascii")).toBe("%PDF-");
   expect(merged.subarray(-2_048).includes(Buffer.from("%%EOF"))).toBe(true);
@@ -175,7 +182,9 @@ test("video to GIF can be canceled, retried, and downloaded without a server job
   await expect(link).toHaveAttribute("download", "synthetic.gif");
   const downloadPromise = page.waitForEvent("download");
   await link.click();
-  const gif = await readDownload(await downloadPromise);
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("synthetic.gif");
+  const gif = await readDownload(download);
   expect(["GIF87a", "GIF89a"]).toContain(gif.subarray(0, 6).toString("ascii"));
   expect(gif.at(-1)).toBe(0x3b);
   expect(jobRequests).toEqual([]);

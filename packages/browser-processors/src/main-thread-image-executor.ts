@@ -1,4 +1,4 @@
-import { dedupeFilenames, replaceExtension } from "@aio-converter/shared";
+import { dedupeFilenames, deriveOutputFilename } from "@aio-converter/shared";
 import {
   ToolError,
   canceledError,
@@ -36,7 +36,7 @@ export class MainThreadImageExecutor implements JobExecutor {
         ? backgroundValue
         : "#ffffff";
     const names = dedupeFilenames(
-      input.files.map((file) => replaceExtension(file.name, preset.outputExtension)),
+      input.files.map((file) => deriveOutputFilename(file.name, preset.outputExtension)),
     );
     const outputs: ProcessOutput[] = [];
 

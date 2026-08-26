@@ -1,4 +1,4 @@
-import { asExactArrayBuffer, dedupeFilenames, replaceExtension } from "@aio-converter/shared";
+import { asExactArrayBuffer, dedupeFilenames, deriveOutputFilename } from "@aio-converter/shared";
 import { ToolError } from "@aio-converter/tool-core";
 import type { BufferProcessor } from "./protocol";
 
@@ -58,7 +58,7 @@ export const imageConvertProcessor: BufferProcessor = {
         ? backgroundValue
         : "#ffffff";
     const names = dedupeFilenames(
-      input.files.map((file) => replaceExtension(file.name, preset.outputExtension)),
+      input.files.map((file) => deriveOutputFilename(file.name, preset.outputExtension)),
     );
     const outputs = [];
 

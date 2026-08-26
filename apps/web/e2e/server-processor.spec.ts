@@ -33,7 +33,7 @@ test("DOCX converts through the ephemeral API and downloads a complete PDF", asy
   await page.goto("/document/docx-to-pdf");
   await waitForToolHydration(page);
   await page.getByTestId("drop-zone").locator('input[type="file"]').setInputFiles({
-    name: "synthetic.docx",
+    name: "Surat Edaran 17 Agustus 2025.docx",
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     buffer: syntheticDOCX(),
   });
@@ -45,10 +45,12 @@ test("DOCX converts through the ephemeral API and downloads a complete PDF", asy
   });
 
   const link = page.getByRole("link", { name: "Download", exact: true });
-  await expect(link).toHaveAttribute("download", "converted.pdf");
+  await expect(link).toHaveAttribute("download", "Surat Edaran 17 Agustus 2025.pdf");
   const downloadPromise = page.waitForEvent("download");
   await link.click();
-  const pdf = await readDownload(await downloadPromise);
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("Surat Edaran 17 Agustus 2025.pdf");
+  const pdf = await readDownload(download);
   expect(pdf.subarray(0, 5).toString("ascii")).toBe("%PDF-");
   expect(pdf.subarray(-2_048).includes(Buffer.from("%%EOF"))).toBe(true);
 

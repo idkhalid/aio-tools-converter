@@ -175,6 +175,7 @@ export function ToolShell({ tool, executor, archiveExecutor }: ToolShellProps) {
         <ResultPanel
           outputs={state.outputs}
           {...(archiveExecutor ? { archiveExecutor } : {})}
+          {...(state.files[0] ? { archiveSourceName: state.files[0].name } : {})}
           onReset={() => dispatch({ type: "reset", tool })}
         />
       )}

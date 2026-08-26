@@ -1,4 +1,4 @@
-import { sanitizeFilename } from "@aio-converter/shared";
+import { deriveOutputFilename, extensionOf, sanitizeDownloadFilename } from "@aio-converter/shared";
 import {
   ToolError,
   canceledError,
@@ -14,6 +14,7 @@ interface ServerJobExecutorOptions {
   apiBaseURL: string;
   toolId: string;
   timeoutMs: number;
+  outputExtension: string;
 }
 
 interface APIErrorBody {
@@ -63,24 +64,55 @@ function filenameFromDisposition(value: string | null): string | undefined {
   const encoded = /filename\*=UTF-8''([^;]+)/i.exec(value)?.[1];
   if (encoded) {
     try {
-      return sanitizeFilename(decodeURIComponent(encoded));
+      return decodeURIComponent(encoded);
     } catch {
       return undefined;
     }
   }
   const plain = /filename="?([^";]+)"?/i.exec(value)?.[1];
-  return plain ? sanitizeFilename(plain) : undefined;
+  return plain?.trim();
+}
+
+const GENERIC_OUTPUT_STEMS = new Set([
+  "conversion",
+  "converted",
+  "converted-file",
+  "download",
+  "file",
+  "output",
+  "result",
+]);
+
+function meaningfulServerFilename(
+  value: string | undefined,
+  outputExtension: string,
+): string | undefined {
+  if (!value) return undefined;
+  const safe = sanitizeDownloadFilename(value, "");
+  if (!safe) return undefined;
+
+  const expectedExtension = outputExtension.replace(/^\.+/, "").toLowerCase();
+  if (!expectedExtension || extensionOf(safe) !== expectedExtension) return undefined;
+
+  const stem = safe
+    .slice(0, -(expectedExtension.length + 1))
+    .trim()
+    .toLowerCase();
+  if (!stem || GENERIC_OUTPUT_STEMS.has(stem)) return undefined;
+  return safe;
 }
 
 export class ServerJobExecutor implements JobExecutor {
   readonly #apiBaseURL: string;
   readonly #toolId: string;
   readonly #timeoutMs: number;
+  readonly #outputExtension: string;
 
   constructor(options: ServerJobExecutorOptions) {
     this.#apiBaseURL = options.apiBaseURL;
     this.#toolId = options.toolId;
     this.#timeoutMs = options.timeoutMs;
+    this.#outputExtension = options.outputExtension;
   }
 
   async execute(input: ProcessInput, context: ProcessContext): Promise<readonly ProcessOutput[]> {
@@ -164,14 +196,17 @@ export class ServerJobExecutor implements JobExecutor {
       if (!outputResponse.ok) throw await responseError(outputResponse);
       const blob = await outputResponse.blob();
       const name =
-        filenameFromDisposition(outputResponse.headers.get("Content-Disposition")) ??
-        finalSnapshot.output?.name ??
-        "converted.pdf";
+        meaningfulServerFilename(
+          filenameFromDisposition(outputResponse.headers.get("Content-Disposition")),
+          this.#outputExtension,
+        ) ??
+        meaningfulServerFilename(finalSnapshot.output?.name, this.#outputExtension) ??
+        deriveOutputFilename(input.files[0]?.name ?? "", this.#outputExtension);
       const mimeType =
         outputResponse.headers.get("Content-Type")?.split(";", 1)[0] ||
         finalSnapshot.output?.mimeType ||
         "application/octet-stream";
-      return [{ name: sanitizeFilename(name), mimeType, size: blob.size, blob }];
+      return [{ name, mimeType, size: blob.size, blob }];
     } catch (error: unknown) {
       if (jobId) await requestCleanup(this.#apiBaseURL, jobId);
       if (timedOut)

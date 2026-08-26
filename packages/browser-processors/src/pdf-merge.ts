@@ -1,3 +1,4 @@
+import { deriveMergedPdfFilename } from "@aio-converter/shared";
 import { ToolError } from "@aio-converter/tool-core";
 import type { BufferProcessor } from "./protocol";
 
@@ -52,6 +53,12 @@ export const pdfMergeProcessor: BufferProcessor = {
     context.reportProgress({ stage: "writing-pdf", progress: null, message: "Writing merged PDF" });
     const bytes = await output.save({ useObjectStreams: true });
     context.reportProgress({ stage: "complete", progress: 1, message: "PDF merged" });
-    return [{ name: "merged.pdf", mimeType: "application/pdf", data: bytes }];
+    return [
+      {
+        name: deriveMergedPdfFilename(input.files.map((file) => file.name)),
+        mimeType: "application/pdf",
+        data: bytes,
+      },
+    ];
   },
 };
