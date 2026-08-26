@@ -17,6 +17,7 @@
 </p>
 
 > **Status: Phase 1 / beta.** The application foundation and four Phase 1 tools are functional. The current UI/UX is a responsive, keyboard-accessible baseline while the final design is being prepared in Figma.
+> Release status: public source available. Production release is blocked pending FFmpeg WASM provenance verification.
 
 ## Phase 1 features
 
