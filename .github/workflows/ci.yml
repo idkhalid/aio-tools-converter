@@ -97,13 +97,18 @@ jobs:
           echo "$OUTPUT"
 
           if [ $EXIT_CODE -ne 0 ]; then
-            if echo "$OUTPUT" | grep -q "blocked pending evidence"; then
+            UNEXPECTED_ERRORS=$(echo "$OUTPUT" | grep "\[COMPLIANCE ERROR\]" | grep -E -v "(Release is BLOCKED|provenance is not verified|exact corresponding source)" || true)
+
+            if echo "$OUTPUT" | grep -q -E "(--enable-nonfree|asset not found|raw WASM hash mismatch)" || [ -n "$UNEXPECTED_ERRORS" ]; then
+              echo "::error::Real compliance failure detected."
+              exit $EXIT_CODE
+            elif echo "$OUTPUT" | grep -q -E "(Release is BLOCKED|provenance is not verified|exact corresponding source)"; then
               echo "::warning::FFmpeg provenance is blocked pending evidence. production/tagged release remains blocked."
               echo "### ⚠️ Release Blocked" >> $GITHUB_STEP_SUMMARY
               echo "FFmpeg provenance is blocked pending evidence. production/tagged release remains blocked." >> $GITHUB_STEP_SUMMARY
               exit 0
             else
-              echo "::error::Real compliance failure detected."
+              echo "::error::Unknown script failure detected."
               exit $EXIT_CODE
             fi
           fi
