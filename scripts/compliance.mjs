@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
+import { gunzipSync } from "node:zlib";
 
 const ROOT_DIR = process.cwd();
 
@@ -50,16 +51,29 @@ for (const pkgPath of PACKAGE_JSONS) {
 
 // 3. Verify FFmpeg asset hashes
 const wasmGzPath = join(ROOT_DIR, "apps/web/public/wasm/ffmpeg/ffmpeg-core.wasm.gz");
-const EXPECTED_HASH = "1767a2d0c6d6b14de37876261443397cecd591f298b162eded99018de4f6355d";
+const EXPECTED_GZIP_HASH = "1767a2d0c6d6b14de37876261443397cecd591f298b162eded99018de4f6355d";
+const EXPECTED_RAW_WASM_HASH = "9f57947a5bd530d8f00c5b3f2cb2a3492faa7e5d823315342d6a8656d0a6b7b7";
 
-if (existsSync(wasmGzPath)) {
-  const wasmGzContent = readFileSync(wasmGzPath);
-  const hash = createHash("sha256").update(wasmGzContent).digest("hex");
-  if (hash !== EXPECTED_HASH) {
-    error(`FFmpeg WASM GZ hash mismatch! Expected: ${EXPECTED_HASH}, Actual: ${hash}`);
-  }
-} else {
+if (!existsSync(wasmGzPath)) {
   error(`FFmpeg WASM GZ asset not found at ${wasmGzPath}`);
+} else {
+  const wasmGzContent = readFileSync(wasmGzPath);
+
+  const gzipHash = createHash("sha256").update(wasmGzContent).digest("hex");
+  if (gzipHash !== EXPECTED_GZIP_HASH) {
+    console.warn(
+      `[COMPLIANCE WARNING] FFmpeg WASM GZ hash differs from documented local hash. ` +
+        `Expected: ${EXPECTED_GZIP_HASH}, Actual: ${gzipHash}. ` +
+        `This is allowed because gzip output may be nondeterministic; verifying raw WASM instead.`,
+    );
+  }
+
+  const rawWasm = gunzipSync(wasmGzContent);
+  const rawHash = createHash("sha256").update(rawWasm).digest("hex");
+
+  if (rawHash !== EXPECTED_RAW_WASM_HASH) {
+    error(`FFmpeg raw WASM hash mismatch! Expected: ${EXPECTED_RAW_WASM_HASH}, Actual: ${rawHash}`);
+  }
 }
 
 // 4. Check for --enable-nonfree and provenance in documentation
