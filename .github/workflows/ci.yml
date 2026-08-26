@@ -64,6 +64,7 @@ jobs:
         run: pnpm test:e2e
         env:
           PLAYWRIGHT_SKIP_API_SERVER: 1
+          PLAYWRIGHT_SKIP_HEAVY_MEDIA: 1
 
   compliance:
     name: Release Compliance Audit

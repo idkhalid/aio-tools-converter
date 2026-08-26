@@ -1,0 +1,41 @@
+name: Full Media E2E
+
+on:
+  workflow_dispatch:
+
+env:
+  PUBLIC_APP_URL: http://localhost:4321
+  PUBLIC_API_URL: http://localhost:8080
+
+jobs:
+  e2e-media:
+    name: Full E2E with Heavy Media
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build JS workspace
+        run: pnpm build
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+      - name: Browser-only E2E (Heavy)
+        run: pnpm test:e2e
+        env:
+          PLAYWRIGHT_SKIP_API_SERVER: 1
+          # Note: PLAYWRIGHT_SKIP_HEAVY_MEDIA is intentionally NOT set

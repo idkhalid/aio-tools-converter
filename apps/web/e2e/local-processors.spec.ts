@@ -144,6 +144,10 @@ test("video to GIF can be canceled, retried, and downloaded without a server job
   page,
 }, testInfo) => {
   test.skip(
+    process.env.PLAYWRIGHT_SKIP_HEAVY_MEDIA === "1",
+    "Skipping heavyweight FFmpeg WASM conversion in default CI; covered by local/full E2E.",
+  );
+  test.skip(
     testInfo.project.name !== "chromium",
     "MediaRecorder for video/webm is only reliable in Chromium for this synthetic fixture.",
   );
