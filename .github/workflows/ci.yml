@@ -1,5 +1,9 @@
 name: CI
 
+env:
+  PUBLIC_APP_URL: http://localhost:4321
+  PUBLIC_API_URL: http://localhost:8080
+
 on:
   push:
     branches: [main]
@@ -80,6 +84,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate FFmpeg asset
+        run: pnpm --filter @aio-converter/web prebuild
 
       - name: Run compliance guardrail
         run: |
