@@ -2,9 +2,9 @@ import { asExactArrayBuffer, dedupeFilenames, replaceExtension } from "@aio-conv
 import { ToolError } from "@aio-converter/tool-core";
 import type { BufferProcessor } from "./protocol";
 
-const MAX_PIXELS = 40_000_000;
+export const MAX_PIXELS = 40_000_000;
 
-function validatePNGDimensions(data: Uint8Array): void {
+export function validatePNGDimensions(data: Uint8Array): void {
   const signature = [137, 80, 78, 71, 13, 10, 26, 10];
   const hasHeader =
     data.byteLength >= 24 &&

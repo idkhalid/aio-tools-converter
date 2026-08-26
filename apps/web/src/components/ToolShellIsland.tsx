@@ -1,4 +1,4 @@
-import { WorkerJobExecutor } from "@aio-converter/browser-processors";
+import { WorkerJobExecutor, MainThreadImageExecutor } from "@aio-converter/browser-processors";
 import { ServerJobExecutor } from "@aio-converter/server-contracts";
 import type { JobExecutor, ToolDefinition } from "@aio-converter/tool-core";
 import { ToolShell } from "@aio-converter/ui";
@@ -13,14 +13,20 @@ function localExecutor(tool: ToolDefinition): JobExecutor {
   };
   switch (tool.processor) {
     case "image-convert":
-      return new WorkerJobExecutor({
-        ...workerOptions,
-        createWorker: () =>
-          new Worker(new URL("../workers/image-convert.worker.ts", import.meta.url), {
-            type: "module",
-            name: "image-convert",
-          }),
-      });
+      if (
+        typeof OffscreenCanvas !== "undefined" &&
+        typeof OffscreenCanvas.prototype.convertToBlob === "function"
+      ) {
+        return new WorkerJobExecutor({
+          ...workerOptions,
+          createWorker: () =>
+            new Worker(new URL("../workers/image-convert.worker.ts", import.meta.url), {
+              type: "module",
+              name: "image-convert",
+            }),
+        });
+      }
+      return new MainThreadImageExecutor(workerOptions);
     case "pdf-merge":
       return new WorkerJobExecutor({
         ...workerOptions,

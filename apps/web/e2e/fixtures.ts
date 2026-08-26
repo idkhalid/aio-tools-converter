@@ -155,59 +155,23 @@ export async function attachSyntheticWebM(page: Page): Promise<void> {
   const input = page.getByTestId("drop-zone").locator('input[type="file"]');
   await input.evaluate(async (element) => {
     const fileInput = element as HTMLInputElement;
-    if (typeof MediaRecorder === "undefined") {
-      throw new Error("Chromium MediaRecorder is unavailable.");
-    }
-    const mimeType = ["video/webm;codecs=vp8", "video/webm"].find((candidate) =>
-      MediaRecorder.isTypeSupported(candidate),
-    );
-    if (!mimeType) throw new Error("Chromium cannot record a synthetic WebM fixture.");
-
     const canvas = document.createElement("canvas");
-    canvas.width = 320;
-    canvas.height = 180;
-    const drawing = canvas.getContext("2d");
-    if (!drawing) throw new Error("Canvas 2D is unavailable.");
-    const stream = canvas.captureStream(10);
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 180_000 });
+    canvas.width = 64;
+    canvas.height = 64;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "blue";
+    context.fillRect(0, 0, 64, 64);
+    const stream = canvas.captureStream(30);
+    const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
     const chunks: Blob[] = [];
-    recorder.addEventListener("dataavailable", (event) => {
-      if (event.data.size > 0) chunks.push(event.data);
-    });
-    const stopped = new Promise<void>((resolve, reject) => {
-      recorder.addEventListener("stop", () => resolve(), { once: true });
-      recorder.addEventListener(
-        "error",
-        () => reject(new Error("Synthetic WebM recording failed.")),
-        {
-          once: true,
-        },
-      );
-    });
-
-    recorder.start(100);
-    for (let frame = 0; frame < 13; frame += 1) {
-      drawing.fillStyle = frame % 2 === 0 ? "#0369a1" : "#16a34a";
-      drawing.fillRect(0, 0, canvas.width, canvas.height);
-      drawing.fillStyle = "#ffffff";
-      drawing.font = "bold 32px sans-serif";
-      drawing.fillText(`Frame ${frame + 1}`, 72, 100);
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+    recorder.ondataavailable = (event) => chunks.push(event.data);
+    recorder.start();
+    await new Promise((resolve) => setTimeout(resolve, 500));
     recorder.stop();
-    await stopped;
-    stream.getTracks().forEach((track) => track.stop());
-
+    await new Promise((resolve) => {
+      recorder.onstop = resolve;
+    });
     const blob = new Blob(chunks, { type: "video/webm" });
-    const signature = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
-    if (
-      signature[0] !== 0x1a ||
-      signature[1] !== 0x45 ||
-      signature[2] !== 0xdf ||
-      signature[3] !== 0xa3
-    ) {
-      throw new Error("Synthetic WebM has an invalid EBML signature.");
-    }
     const transfer = new DataTransfer();
     transfer.items.add(new File([blob], "synthetic.webm", { type: "video/webm" }));
     fileInput.files = transfer.files;

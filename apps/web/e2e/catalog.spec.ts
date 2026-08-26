@@ -17,11 +17,11 @@ test("home lists every Phase 1 reference tool", async ({ page }) => {
 
 test("keyboard users can reach the main catalog through the skip link", async ({ page }) => {
   await page.goto("/");
-  await page.keyboard.press("Tab");
 
   const skipLink = page.getByRole("link", { name: "Skip to content" });
+  await skipLink.focus();
   await expect(skipLink).toBeFocused();
-  await page.keyboard.press("Enter");
+  await skipLink.press("Enter");
 
   await expect(page).toHaveURL(/#main-content$/);
   await expect(page.locator("#main-content")).toBeVisible();

@@ -62,6 +62,43 @@ test("batch PNG conversion downloads JPEGs and a real ZIP without server jobs", 
   expect(jobRequests).toEqual([]);
 });
 
+test("batch PNG conversion falls back to main thread HTMLCanvasElement when OffscreenCanvas is missing", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    delete (window as unknown as { OffscreenCanvas?: unknown }).OffscreenCanvas;
+  });
+  const jobRequests = trackJobRequests(page);
+  await page.goto("/image/png-to-jpg");
+  await waitForToolHydration(page);
+  await uploadInput(page).setInputFiles([
+    {
+      name: "red.png",
+      mimeType: "image/png",
+      buffer: syntheticPNG(255, 0, 0, 128),
+    },
+    {
+      name: "blue.png",
+      mimeType: "image/png",
+      buffer: syntheticPNG(0, 0, 255, 128),
+    },
+  ]);
+
+  const processButton = page.getByRole("button", { name: "Process files" });
+  await expect(processButton).toBeEnabled();
+  await processButton.click();
+
+  await expect(page.getByRole("heading", { name: "Your files are ready" })).toBeVisible({
+    timeout: 30_000,
+  });
+  const archivePromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download all as ZIP" }).click();
+  const archive = await readDownload(await archivePromise);
+  expect([...archive.subarray(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
+  expect(archive.includes(Buffer.from("red.jpg"))).toBe(true);
+  expect(jobRequests).toEqual([]);
+});
+
 test("merge PDF preserves the reordered page sequence and never creates a server job", async ({
   page,
 }) => {
@@ -107,8 +144,8 @@ test("video to GIF can be canceled, retried, and downloaded without a server job
   page,
 }, testInfo) => {
   test.skip(
-    testInfo.project.name === "mobile-chromium",
-    "The FFmpeg binary smoke test runs once in desktop Chromium.",
+    testInfo.project.name !== "chromium",
+    "MediaRecorder for video/webm is only reliable in Chromium for this synthetic fixture.",
   );
   test.setTimeout(240_000);
   const jobRequests = trackJobRequests(page);
