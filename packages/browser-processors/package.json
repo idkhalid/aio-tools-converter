@@ -17,5 +17,6 @@
     "@ffmpeg/ffmpeg": "^0.12.15",
     "fflate": "^0.8.2",
     "pdf-lib": "^1.17.1"
-  }
+  },
+  "license": "GPL-3.0-or-later"
 }

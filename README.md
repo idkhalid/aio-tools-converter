@@ -185,9 +185,13 @@ Routes, metadata, privacy badges, initial validation, options, and related tools
 
 ## License and release gate
 
-The AIO Converter source is currently **`UNLICENSED`**. Publishing the repository does not automatically make it open source or grant permission to use, modify, or redistribute the source.
+The AIO Converter source code is licensed under the **GPL-3.0-or-later**.
 
-The prebuilt `@ffmpeg/core` runtime used by Video to GIF declares **GPL-2.0-or-later**. Generated FFmpeg runtime assets are gitignored and are not included in this source-only repository. Before publicly deploying or distributing a built application that includes the runtime, the project owner must either meet its distribution obligations or replace it with an audited LGPL-only build. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the dependency inventory and compliance notes.
+Third-party components remain under their own licenses. The project name, logo, and brand assets are not granted under the GPL.
+
+Copyright (C) 2026 Idham Khalid.
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the dependency inventory and compliance notes.
 
 ## Documentation
 

@@ -13,5 +13,6 @@
   },
   "dependencies": {
     "@aio-converter/shared": "workspace:*"
-  }
+  },
+  "license": "GPL-3.0-or-later"
 }

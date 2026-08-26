@@ -2,7 +2,7 @@
   "name": "aio-converter",
   "version": "0.0.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "packageManager": "pnpm@11.23.0",
   "engines": {
@@ -27,7 +27,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "format": "prettier . --write",
-    "format:check": "prettier . --check"
+    "format:check": "prettier . --check",
+    "compliance": "node scripts/compliance.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

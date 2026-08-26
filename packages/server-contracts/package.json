@@ -14,5 +14,6 @@
   "dependencies": {
     "@aio-converter/shared": "workspace:*",
     "@aio-converter/tool-core": "workspace:*"
-  }
+  },
+  "license": "GPL-3.0-or-later"
 }
