@@ -52,8 +52,12 @@ export function ResultPanel({
       const link = document.createElement("a");
       link.href = url;
       link.download = archive.name;
+      document.body.appendChild(link);
       link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 60_000);
     } catch {
       if (!controller.signal.aborted) {
         setArchiveError(
@@ -128,6 +132,7 @@ export function ResultPanel({
               className="w-full rounded-[1rem] bg-indigo-500 py-3.5 text-[1.05rem] font-medium text-white shadow-md transition-colors hover:bg-indigo-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
               type="button"
               onClick={() => void downloadArchive()}
+              aria-label="Download all as ZIP"
             >
               Download all (.zip)
             </button>

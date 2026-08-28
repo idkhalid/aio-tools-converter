@@ -25,7 +25,7 @@ export function ProgressPanel({
             <h2 className="text-[1.125rem] font-semibold text-slate-950">
               {canceling ? "Canceling..." : "Converting your files..."}
             </h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-slate-500 truncate">
               {canceling
                 ? "Stopping the current job and cleaning up."
                 : (progress?.message ?? "Working on your files...")}

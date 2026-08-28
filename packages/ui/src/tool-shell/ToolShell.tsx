@@ -166,6 +166,7 @@ export function ToolShell({ tool, executor, archiveExecutor }: ToolShellProps) {
           type="button"
           disabled={!canProcess}
           onClick={() => void process()}
+          aria-label="Process files"
         >
           {tool.processor === "pdf-merge"
             ? "Merge PDFs"

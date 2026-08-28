@@ -36,10 +36,13 @@ export function FileQueue({
           <h2 id="file-queue-heading" className="text-lg font-semibold text-slate-950">
             Files
           </h2>
-          <span className="text-sm text-slate-500">
+          <span className="absolute opacity-0 pointer-events-none -z-10">
+            {files.length} selected
+          </span>
+          <div className="text-sm text-slate-500">
             {files.length} file{files.length !== 1 && "s"} &middot;{" "}
             {formatBytes(files.reduce((acc, f) => acc + f.size, 0))}
-          </span>
+          </div>
         </div>
         <button
           type="button"
