@@ -36,8 +36,8 @@ export function DropZone({
 
   return (
     <div
-      className={`rounded-3xl border-2 border-dashed p-8 text-center transition sm:p-12 ${
-        dragging ? "border-sky-500 bg-sky-50" : "border-slate-300 bg-slate-50"
+      className={`rounded-[1.5rem] border-2 border-dashed p-10 text-center transition sm:p-14 ${
+        dragging ? "border-indigo-500 bg-indigo-50/50" : "border-slate-300/80 bg-white"
       }`}
       onDragEnter={(event) => {
         event.preventDefault();
@@ -61,16 +61,43 @@ export function DropZone({
           event.currentTarget.value = "";
         }}
       />
-      <p className="text-lg font-semibold text-slate-900">Drop files here</p>
-      <p className="mt-2 text-sm text-slate-600">or select them with the file picker</p>
+
+      <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M12 19V5M5 12l7-7 7 7" />
+        </svg>
+      </div>
+
+      {dragging ? (
+        <p className="text-[1.125rem] font-semibold text-indigo-600">Drop to add your files</p>
+      ) : (
+        <p className="text-[1.125rem] font-semibold text-slate-900">Drop files here</p>
+      )}
+
+      {!dragging && (
+        <p className="mt-2 text-[0.9rem] text-slate-500">or choose files from your device</p>
+      )}
+
       <button
-        className="mt-5 rounded-xl bg-sky-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-sky-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:opacity-50"
+        className="mt-6 rounded-xl bg-indigo-500 px-6 py-2.5 font-medium text-white shadow-sm transition-colors hover:bg-indigo-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 disabled:opacity-50"
         type="button"
         disabled={disabled}
         onClick={openPicker}
       >
-        Choose {multiple ? "files" : "a file"}
+        Choose files
       </button>
+
+      <p className="mt-6 text-[0.85rem] text-slate-500">Files up to 50 MB each</p>
     </div>
   );
 }

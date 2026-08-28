@@ -114,12 +114,12 @@ export function ToolShell({ tool, executor, archiveExecutor }: ToolShellProps) {
     Object.keys(state.optionErrors).length === 0;
 
   return (
-    <div
-      className="mx-auto max-w-3xl rounded-[2rem] border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/50 sm:p-8"
-      data-tool-id={tool.id}
-    >
-      <PrivacyBadge mode={tool.execution} />
-      <div className="mt-6">
+    <div className="mx-auto w-full max-w-[800px]" data-tool-id={tool.id}>
+      <div className="flex justify-center mb-8">
+        <PrivacyBadge mode={tool.execution} />
+      </div>
+
+      {state.files.length === 0 && !busy && (
         <DropZone
           accepts={tool.accepts}
           multiple={tool.maxFiles > 1}
@@ -128,25 +128,31 @@ export function ToolShell({ tool, executor, archiveExecutor }: ToolShellProps) {
           onPickerOpen={() => dispatch({ type: "picker-opened" })}
           onPickerClosed={() => dispatch({ type: "picker-closed" })}
         />
-      </div>
-      <FileQueue
-        files={state.files}
-        issues={state.fileIssues}
-        disabled={busy}
-        reorderable={tool.processor === "pdf-merge"}
-        onRemove={(index) => setFiles(state.files.filter((_, candidate) => candidate !== index))}
-        onMove={(index, direction) => {
-          const destination = index + direction;
-          if (destination < 0 || destination >= state.files.length) return;
-          const next = [...state.files];
-          const current = next[index];
-          const other = next[destination];
-          if (!current || !other) return;
-          next[index] = other;
-          next[destination] = current;
-          setFiles(next);
-        }}
-      />
+      )}
+
+      {!busy && state.phase !== "success" && state.phase !== "error" && (
+        <FileQueue
+          files={state.files}
+          issues={state.fileIssues}
+          disabled={busy}
+          reorderable={tool.processor === "pdf-merge"}
+          accepts={tool.accepts}
+          multiple={tool.maxFiles > 1}
+          onFiles={addFiles}
+          onRemove={(index) => setFiles(state.files.filter((_, candidate) => candidate !== index))}
+          onMove={(index, direction) => {
+            const destination = index + direction;
+            if (destination < 0 || destination >= state.files.length) return;
+            const next = [...state.files];
+            const current = next[index];
+            const other = next[destination];
+            if (!current || !other) return;
+            next[index] = other;
+            next[destination] = current;
+            setFiles(next);
+          }}
+        />
+      )}
       <ToolOptions
         definitions={tool.options}
         values={state.options}
@@ -154,20 +160,23 @@ export function ToolShell({ tool, executor, archiveExecutor }: ToolShellProps) {
         disabled={busy}
         onChange={updateOption}
       />
-      {!busy && ["idle", "selecting", "ready"].includes(state.phase) && (
+      {!busy && ["idle", "selecting", "ready"].includes(state.phase) && state.files.length > 0 && (
         <button
-          className="primary-button mt-6 w-full py-3 text-base"
+          className="mt-8 w-full rounded-[1rem] bg-indigo-500 py-4 text-[1.1rem] font-medium text-white shadow-md transition-colors hover:bg-indigo-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 disabled:opacity-50"
           type="button"
           disabled={!canProcess}
           onClick={() => void process()}
         >
-          Process files
+          {tool.processor === "pdf-merge"
+            ? "Merge PDFs"
+            : `Convert to ${tool.options.find((o) => o.key === "format")?.defaultValue || tool.id.split("-to-")[1]?.toUpperCase() || "files"}`}
         </button>
       )}
       {busy && (
         <ProgressPanel
           progress={state.progress}
           canceling={state.phase === "canceling"}
+          files={state.files}
           onCancel={cancel}
         />
       )}
@@ -180,7 +189,7 @@ export function ToolShell({ tool, executor, archiveExecutor }: ToolShellProps) {
         />
       )}
       {state.phase === "error" && state.error && (
-        <ToolErrorPanel error={state.error} onRetry={() => void process()} />
+        <ToolErrorPanel error={state.error} files={state.files} onRetry={() => void process()} />
       )}
     </div>
   );
