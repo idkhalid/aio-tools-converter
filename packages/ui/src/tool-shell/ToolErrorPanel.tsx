@@ -1,15 +1,105 @@
-import type { ToolError } from "@aio-converter/tool-core";
 import { formatBytes } from "@aio-converter/shared";
+import type { ToolDefinition, ToolError } from "@aio-converter/tool-core";
+import { EdgeStatePanel } from "./EdgeStatePanel";
 
 export function ToolErrorPanel({
   error,
   files,
+  tool,
   onRetry,
+  onChooseAnother,
+  onRemoveFiles,
 }: {
   error: ToolError;
   files: readonly File[];
+  tool: ToolDefinition;
   onRetry(): void;
+  onChooseAnother(): void;
+  onRemoveFiles(): void;
 }) {
+  if (error.code === "BROWSER_UNSUPPORTED") {
+    return (
+      <EdgeStatePanel
+        tone="warning"
+        statusLabel="Unsupported browser"
+        title="Your browser does not support this conversion"
+        description="Try the latest version of Chrome, Edge, Firefox, or Safari."
+        detailTitle="Try a modern browser"
+        detailDescription="The browser feature required for this local conversion is not available."
+        primaryAction={{ label: "Choose another file", onClick: onChooseAnother }}
+        secondaryAction={{ label: "Back to tools", href: "/" }}
+        alert
+      />
+    );
+  }
+
+  if (tool.execution === "SERVER_EPHEMERAL" && error.code === "NETWORK_ERROR") {
+    return (
+      <EdgeStatePanel
+        tone="danger"
+        statusLabel="Service unavailable"
+        title="Converter service unavailable"
+        description="The document conversion service is temporarily unavailable. Your file was not stored permanently."
+        detailTitle="Could not start conversion"
+        detailDescription="If the problem continues, try again later."
+        primaryAction={{ label: "Try again", onClick: onRetry }}
+        secondaryAction={{ label: "Choose another file", onClick: onChooseAnother }}
+        alert
+      />
+    );
+  }
+
+  if (error.code === "FILE_TOO_LARGE") {
+    const file = files[0];
+    const hasByteLimit = Boolean(file && file.size > tool.maxInputBytes);
+    return (
+      <EdgeStatePanel
+        tone="warning"
+        statusLabel="Too large"
+        title="File is too large"
+        description="Try a smaller file or compress it before converting."
+        detailTitle={file?.name ?? "The selected file exceeds this converter's limit"}
+        detailDescription={error.message}
+        primaryAction={{ label: "Upload smaller file", onClick: onChooseAnother }}
+        secondaryAction={{ label: "Remove file", onClick: onRemoveFiles }}
+        alert
+      >
+        {hasByteLimit && file && (
+          <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-amber-200 bg-white/80 px-4 py-3">
+              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Selected
+              </dt>
+              <dd className="mt-1 font-semibold text-slate-950">{formatBytes(file.size)}</dd>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-white/80 px-4 py-3">
+              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Limit</dt>
+              <dd className="mt-1 font-semibold text-slate-950">
+                {formatBytes(tool.maxInputBytes)}
+              </dd>
+            </div>
+          </dl>
+        )}
+      </EdgeStatePanel>
+    );
+  }
+
+  if (error.code === "FILE_TYPE" || error.code === "FILE_SIGNATURE") {
+    return (
+      <EdgeStatePanel
+        tone="danger"
+        statusLabel="Unsupported"
+        title="Unsupported file type"
+        description="Remove this file and upload a supported format."
+        detailTitle="Unsupported format"
+        detailDescription={error.message}
+        primaryAction={{ label: "Choose another file", onClick: onChooseAnother }}
+        secondaryAction={{ label: "Remove file", onClick: onRemoveFiles }}
+        alert
+      />
+    );
+  }
+
   return (
     <section
       ref={(node) => node?.focus()}

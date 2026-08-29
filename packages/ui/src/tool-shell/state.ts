@@ -8,7 +8,16 @@ import {
 } from "@aio-converter/tool-core";
 
 export type ToolShellPhase =
-  "idle" | "selecting" | "ready" | "processing" | "canceling" | "success" | "error";
+  | "idle"
+  | "selecting"
+  | "ready"
+  | "processing"
+  | "canceling"
+  | "canceled"
+  | "success"
+  | "partial-success"
+  | "empty"
+  | "error";
 
 export interface ToolShellState {
   phase: ToolShellPhase;
@@ -19,6 +28,7 @@ export interface ToolShellState {
   validationPending: boolean;
   progress: ProcessProgress | null;
   outputs: readonly ProcessOutput[];
+  failedFiles: readonly File[];
   error: ToolError | null;
   runId: number | null;
 }
@@ -37,6 +47,20 @@ export type ToolShellEvent =
   | { type: "validation-rejected"; runId: number }
   | { type: "progress"; runId: number; progress: ProcessProgress }
   | { type: "succeeded"; runId: number; outputs: readonly ProcessOutput[] }
+  | {
+      type: "partially-succeeded";
+      runId: number;
+      outputs: readonly ProcessOutput[];
+      failedFiles: readonly File[];
+    }
+  | {
+      type: "partial-failed";
+      runId: number;
+      outputs: readonly ProcessOutput[];
+      failedFiles: readonly File[];
+      error: ToolError;
+    }
+  | { type: "empty-result"; runId: number }
   | { type: "failed"; runId: number; error: ToolError }
   | { type: "cancel-requested"; runId: number }
   | { type: "canceled"; runId: number }
@@ -52,6 +76,7 @@ export function createInitialToolShellState(tool: ToolDefinition): ToolShellStat
     validationPending: false,
     progress: null,
     outputs: [],
+    failedFiles: [],
     error: null,
     runId: null,
   };
@@ -75,6 +100,7 @@ export function toolShellReducer(state: ToolShellState, event: ToolShellEvent): 
         fileIssues: [],
         validationPending: event.files.length > 0,
         outputs: [],
+        failedFiles: [],
         error: null,
         progress: null,
         runId: null,
@@ -86,8 +112,11 @@ export function toolShellReducer(state: ToolShellState, event: ToolShellEvent): 
         ...state,
         options: event.options,
         optionErrors: event.errors,
-        outputs: state.phase === "success" ? [] : state.outputs,
-        phase: state.phase === "success" ? phaseWithFiles(state.files) : state.phase,
+        outputs: ["success", "partial-success", "empty"].includes(state.phase) ? [] : state.outputs,
+        failedFiles: state.phase === "partial-success" ? [] : state.failedFiles,
+        phase: ["success", "partial-success", "empty"].includes(state.phase)
+          ? phaseWithFiles(state.files)
+          : state.phase,
       };
     case "started":
       return {
@@ -96,6 +125,7 @@ export function toolShellReducer(state: ToolShellState, event: ToolShellEvent): 
         runId: event.runId,
         progress: { stage: "validating", progress: null, message: "Validating files" },
         outputs: [],
+        failedFiles: [],
         error: null,
       };
     case "validation-rejected":
@@ -118,6 +148,43 @@ export function toolShellReducer(state: ToolShellState, event: ToolShellEvent): 
             phase: "success",
             progress: { stage: "complete", progress: 1, message: "Processing complete" },
             outputs: event.outputs,
+            failedFiles: [],
+            error: null,
+            runId: null,
+          }
+        : state;
+    case "partially-succeeded":
+      return event.runId === state.runId
+        ? {
+            ...state,
+            phase: "partial-success",
+            progress: { stage: "complete", progress: 1, message: "Processing complete" },
+            outputs: event.outputs,
+            failedFiles: event.failedFiles,
+            error: null,
+            runId: null,
+          }
+        : state;
+    case "partial-failed":
+      return event.runId === state.runId
+        ? {
+            ...state,
+            phase: "partial-success",
+            progress: null,
+            outputs: event.outputs,
+            failedFiles: event.failedFiles,
+            error: event.error,
+            runId: null,
+          }
+        : state;
+    case "empty-result":
+      return event.runId === state.runId
+        ? {
+            ...state,
+            phase: "empty",
+            progress: { stage: "complete", progress: 1, message: "Processing complete" },
+            outputs: [],
+            failedFiles: [],
             error: null,
             runId: null,
           }
@@ -128,6 +195,8 @@ export function toolShellReducer(state: ToolShellState, event: ToolShellEvent): 
             ...state,
             phase: "error",
             progress: null,
+            outputs: [],
+            failedFiles: [],
             error: event.error,
             runId: null,
           }
@@ -135,11 +204,13 @@ export function toolShellReducer(state: ToolShellState, event: ToolShellEvent): 
     case "cancel-requested":
       return event.runId === state.runId ? { ...state, phase: "canceling" } : state;
     case "canceled":
-      return event.runId === state.runId || state.phase === "canceling"
+      return event.runId === state.runId
         ? {
             ...state,
-            phase: phaseWithFiles(state.files),
+            phase: "canceled",
             progress: null,
+            outputs: [],
+            failedFiles: [],
             error: null,
             runId: null,
           }
