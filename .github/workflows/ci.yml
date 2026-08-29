@@ -98,12 +98,15 @@ jobs:
           echo "$OUTPUT"
 
           if [ $EXIT_CODE -ne 0 ]; then
-            UNEXPECTED_ERRORS=$(echo "$OUTPUT" | grep "\[COMPLIANCE ERROR\]" | grep -E -v "(Release is BLOCKED|provenance is not verified|exact corresponding source)" || true)
+            EXPECTED_PROVENANCE_ERROR="[COMPLIANCE ERROR] Release is BLOCKED: FFmpeg WASM provenance is not verified. Complete Path A or Path B in docs/compliance/ffmpeg.md, publish the exact Corresponding Source bundle, record its hashes/build evidence, and only then mark provenance verified."
+            COMPLIANCE_ERRORS=$(printf '%s\n' "$OUTPUT" | grep -F "[COMPLIANCE ERROR]" || true)
+            EXPECTED_ERROR_COUNT=$(printf '%s\n' "$COMPLIANCE_ERRORS" | grep -Fxc "$EXPECTED_PROVENANCE_ERROR" || true)
+            UNEXPECTED_ERRORS=$(printf '%s\n' "$COMPLIANCE_ERRORS" | grep -Fvx "$EXPECTED_PROVENANCE_ERROR" || true)
 
-            if echo "$OUTPUT" | grep -q -E "(--enable-nonfree|asset not found|raw WASM hash mismatch)" || [ -n "$UNEXPECTED_ERRORS" ]; then
+            if [ -n "$UNEXPECTED_ERRORS" ]; then
               echo "::error::Real compliance failure detected."
               exit $EXIT_CODE
-            elif echo "$OUTPUT" | grep -q -E "(Release is BLOCKED|provenance is not verified|exact corresponding source)"; then
+            elif [ "$EXIT_CODE" -eq 1 ] && [ "$EXPECTED_ERROR_COUNT" -eq 1 ]; then
               echo "::warning::FFmpeg provenance is blocked pending evidence. production/tagged release remains blocked."
               echo "### ⚠️ Release Blocked" >> $GITHUB_STEP_SUMMARY
               echo "FFmpeg provenance is blocked pending evidence. production/tagged release remains blocked." >> $GITHUB_STEP_SUMMARY
