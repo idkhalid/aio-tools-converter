@@ -95,7 +95,7 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open <http://localhost:4321>. The three `LOCAL_ONLY` tools work without a backend. FFmpeg assets are generated automatically from the dependency during `dev` or `build` and do not need to be stored in Git.
+Open <http://localhost:4321>. The three `LOCAL_ONLY` tools work without a backend. FFmpeg assets are generated automatically from the resolved dependency during `dev` or `build` and do not need to be stored in Git. This copy/compression step is not an FFmpeg source build or provenance evidence; production and tagged distribution remain blocked by the FFmpeg compliance gate.
 
 ### Full stack
 
@@ -122,6 +122,7 @@ See [docs/development.md](docs/development.md) for the complete development guid
 | `pnpm test`         | Run JavaScript unit tests and Go tests                |
 | `pnpm test:e2e`     | Run the Playwright E2E suite                          |
 | `pnpm format:check` | Check source formatting                               |
+| `pnpm compliance`   | Audit release licenses and FFmpeg provenance          |
 
 ## Configuration
 
@@ -155,9 +156,12 @@ pnpm typecheck
 pnpm test
 pnpm build
 pnpm test:e2e
+pnpm compliance
 ```
 
 `pnpm test:e2e` requires Docker for the DOCX-to-PDF smoke test. Set `PLAYWRIGHT_SKIP_API_SERVER=1` for a browser-only audit, but that mode does not replace container-stack validation.
+
+Until FFmpeg Corresponding Source provenance is completed, `pnpm compliance` is expected to fail only with the documented FFmpeg provenance blocker. Missing assets, hash mismatches, nonfree configuration, or any other compliance errors are not acceptable expected failures.
 
 Phase 1 automated E2E coverage targets desktop and mobile Chromium. Safari and Firefox still require manual testing before claiming production-grade cross-browser support.
 
@@ -189,6 +193,8 @@ Routes, metadata, privacy badges, initial validation, options, and related tools
 The AIO Converter source code is licensed under the **GPL-3.0-or-later**.
 
 Third-party components remain under their own licenses. The project name, logo, and brand assets are not granted under the GPL.
+
+The current FFmpeg WASM artifact is byte-identified but its exact source/build chain is not verified. See [FFmpeg WASM provenance and release gate](docs/compliance/ffmpeg.md) before any production or tagged release.
 
 Copyright (C) 2026 Idham Khalid.
 
