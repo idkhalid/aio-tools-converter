@@ -9,49 +9,59 @@ export interface FFmpegAssetURLs {
   wasmGzipURL?: string;
 }
 
-async function inflateWasmURL(gzipURL: string, signal: AbortSignal): Promise<string> {
-  let response: Response;
-  try {
-    response = await fetch(gzipURL, {
-      cache: "force-cache",
-      credentials: "omit",
-      signal,
-    });
-  } catch {
-    if (signal.aborted) throw canceledError();
-    throw new ToolError("PROCESSING_FAILED", "The local FFmpeg runtime could not be loaded.", true);
-  }
-  if (!response.ok) {
-    throw new ToolError(
-      "PROCESSING_FAILED",
-      "The local FFmpeg runtime is unavailable. Check the deployment assets.",
-      true,
-    );
-  }
+function cacheBypassURL(url: string): string {
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}ffmpeg_retry=${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2)}`;
+}
+
+async function fetchWasm(
+  url: string,
+  cache: RequestCache,
+  signal: AbortSignal,
+): Promise<Uint8Array> {
+  const response = await fetch(url, { cache, credentials: "omit", signal });
+  if (!response.ok) throw new Error(`FFmpeg asset request failed with status ${response.status}`);
 
   const downloaded = new Uint8Array(await response.arrayBuffer());
   if (signal.aborted) throw canceledError();
-  try {
-    // Some development servers transparently decode `.gz` responses after
-    // adding Content-Encoding: gzip. Production hosts may return the stored
-    // gzip bytes directly, so accept either representation.
-    const isWasm =
-      downloaded[0] === 0x00 &&
-      downloaded[1] === 0x61 &&
-      downloaded[2] === 0x73 &&
-      downloaded[3] === 0x6d;
-    const wasm = isWasm ? downloaded : (await import("fflate")).gunzipSync(downloaded);
-    if (wasm[0] !== 0x00 || wasm[1] !== 0x61 || wasm[2] !== 0x73 || wasm[3] !== 0x6d) {
-      throw new Error("Invalid WebAssembly signature");
-    }
-    return URL.createObjectURL(new Blob([asExactArrayBuffer(wasm)], { type: "application/wasm" }));
-  } catch {
-    throw new ToolError(
-      "PROCESSING_FAILED",
-      "The local FFmpeg runtime is damaged and could not be opened.",
-      true,
-    );
+  // Some development servers transparently decode `.gz` responses after
+  // adding Content-Encoding: gzip. Production hosts may return the stored
+  // gzip bytes directly, so accept either representation.
+  const isWasm =
+    downloaded[0] === 0x00 &&
+    downloaded[1] === 0x61 &&
+    downloaded[2] === 0x73 &&
+    downloaded[3] === 0x6d;
+  const wasm = isWasm ? downloaded : (await import("fflate")).gunzipSync(downloaded);
+  if (wasm[0] !== 0x00 || wasm[1] !== 0x61 || wasm[2] !== 0x73 || wasm[3] !== 0x6d) {
+    throw new Error("Invalid WebAssembly signature");
   }
+  return wasm;
+}
+
+async function inflateWasmURL(gzipURL: string, signal: AbortSignal): Promise<string> {
+  let wasm: Uint8Array;
+  try {
+    wasm = await fetchWasm(gzipURL, "force-cache", signal);
+  } catch {
+    if (signal.aborted) throw canceledError();
+    try {
+      // Download managers can cache an empty 204 response for the stable asset
+      // URL. Retry once with a distinct URL so the browser and integrations
+      // must request the real runtime again.
+      wasm = await fetchWasm(cacheBypassURL(gzipURL), "no-store", signal);
+    } catch {
+      if (signal.aborted) throw canceledError();
+      throw new ToolError(
+        "PROCESSING_FAILED",
+        "The local FFmpeg runtime could not be opened. Refresh the page and try again; a browser extension, download manager, or stale cache may be interfering.",
+        true,
+      );
+    }
+  }
+  return URL.createObjectURL(new Blob([asExactArrayBuffer(wasm)], { type: "application/wasm" }));
 }
 
 function finiteOption(
