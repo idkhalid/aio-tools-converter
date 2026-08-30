@@ -50,6 +50,19 @@ pnpm build
 pnpm test:e2e
 ```
 
+## Staging-like build validation
+
+Build-time public origins are embedded into canonical URLs and CSP. Before handing a branch to staging, validate with approved placeholder or staging origins rather than localhost:
+
+```bash
+PUBLIC_APP_URL=https://staging.example.invalid \
+PUBLIC_API_URL=https://api-staging.example.invalid \
+AIO_REQUIRE_PUBLIC_ORIGINS=1 \
+pnpm --filter @aio-converter/web build
+```
+
+Use real staging origins only in local ignored environment files or the deployment provider. The full Pages, Compose, Tunnel, CORS, and smoke-test procedure is in [deployment.md](deployment.md).
+
 API Go dapat diuji terpisah tanpa LibreOffice pada host karena integration test memakai processor yang diinjeksi:
 
 ```bash
