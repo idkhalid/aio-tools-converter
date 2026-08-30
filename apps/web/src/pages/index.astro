@@ -26,32 +26,32 @@ const documentTools = tools
   description="Convert images, PDFs, videos, and documents with local-first processing and transparent privacy."
   canonicalPath="/"
 >
-  {/* Hero Section */}
   <section
-    class="relative overflow-hidden bg-gradient-to-b from-[#f5f7ff] to-white border-b border-slate-100 pb-12 pt-8 sm:pt-24 sm:pb-28"
+    class="border-b border-slate-200/70 bg-gradient-to-b from-indigo-50/70 via-[#f7f8fc] to-[#f7f8fc] py-14 sm:py-20"
   >
-    <div class="mx-auto max-w-[1200px] px-4 text-center sm:px-6 relative z-10">
+    <div class="relative z-10 mx-auto max-w-[1200px] px-4 text-center sm:px-6">
       <div
-        class="inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white px-3 sm:px-4 py-1 sm:py-1.5 text-xs sm:text-sm font-semibold text-indigo-600 shadow-sm mb-6 sm:mb-8"
+        class="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white px-3 py-1 text-xs font-semibold text-indigo-700 shadow-sm sm:mb-7 sm:px-4 sm:py-1.5 sm:text-sm"
       >
-        100+ tools &bull; Gratis &bull; Tanpa install
+        Private by design &bull; No install &bull; Easy to use
       </div>
 
       <h1
-        class="mx-auto max-w-4xl text-4xl font-black tracking-tight text-slate-950 sm:text-7xl leading-[1.1]"
+        class="mx-auto max-w-4xl text-4xl font-black leading-[1.08] tracking-tight text-slate-950 sm:text-6xl"
       >
         Useful converters.<br />
         <span class="text-indigo-600">With clear privacy.</span>
       </h1>
 
-      <p class="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-500">
+      <p
+        class="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-500 sm:mt-6 sm:text-lg sm:leading-8"
+      >
         Convert, compress, edit, and download files without extra applications.
       </p>
 
-      {/* Search Bar */}
-      <div class="mx-auto mt-10 max-w-2xl relative">
+      <div class="relative mx-auto mt-8 max-w-2xl sm:mt-10">
         <div
-          class="relative flex items-center w-full rounded-2xl bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/10 transition-all overflow-hidden"
+          class="relative flex w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.05)] transition focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/10"
         >
           <div class="pl-4 sm:pl-6 text-slate-400 shrink-0">
             <svg class="size-5 sm:size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -78,13 +78,12 @@ const documentTools = tools
         </div>
       </div>
 
-      {/* Pills */}
-      <div class="mt-8 flex flex-wrap justify-center gap-3">
+      <div class="mt-7 flex flex-wrap justify-center gap-2.5 sm:mt-8 sm:gap-3">
         {
           tools.map((t) => (
             <a
               href={t.seo.canonicalPath}
-              class="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:border-indigo-300 hover:text-indigo-600 transition-colors"
+              class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-indigo-300 hover:text-indigo-600 sm:px-5"
             >
               {t.title}
             </a>
@@ -94,107 +93,104 @@ const documentTools = tools
     </div>
   </section>
 
-  {/* Categories Section */}
-  <section
-    class="mx-auto max-w-[1200px] px-4 py-12 sm:py-24 sm:px-6 border-b border-slate-100 bg-[#fafcff]"
-  >
-    <div
-      class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-8 sm:mb-10"
-    >
-      <div>
-        <span class="text-sm font-bold tracking-wider text-indigo-600 uppercase">Explore Tools</span
-        >
-        <h2 class="mt-2 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
-          Explore by category
-        </h2>
+  <section class="border-y border-slate-200/70 bg-white/70">
+    <div class="mx-auto max-w-[1200px] px-4 py-12 sm:px-6 sm:py-20">
+      <div class="mb-8 flex flex-col items-start gap-4 sm:mb-10 sm:flex-row sm:items-end">
+        <div>
+          <span class="text-sm font-bold uppercase tracking-wider text-indigo-600"
+            >Explore Tools</span
+          >
+          <h2 class="mt-2 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+            Explore by category
+          </h2>
+        </div>
       </div>
-    </div>
 
-    <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-      <CategoryCard
-        title="Image Tools"
-        description="Convert, compress, resize, and optimize images."
-        tools={imageTools}
-        iconBgClass="bg-indigo-50"
-        iconTextClass="text-indigo-500"
-      >
-        <svg slot="icon" class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-          ></path>
-        </svg>
-      </CategoryCard>
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <CategoryCard
+          title="Image Tools"
+          description="Convert, compress, resize, and optimize images."
+          tools={imageTools}
+          iconBgClass="bg-indigo-50"
+          iconTextClass="text-indigo-500"
+        >
+          <svg slot="icon" class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+            ></path>
+          </svg>
+        </CategoryCard>
 
-      <CategoryCard
-        title="PDF Tools"
-        description="Edit and convert documents without extra software."
-        tools={pdfTools}
-        iconBgClass="bg-rose-50"
-        iconTextClass="text-rose-500"
-      >
-        <svg slot="icon" class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-          ></path>
-        </svg>
-      </CategoryCard>
+        <CategoryCard
+          title="PDF Tools"
+          description="Edit and convert documents without extra software."
+          tools={pdfTools}
+          iconBgClass="bg-rose-50"
+          iconTextClass="text-rose-500"
+        >
+          <svg slot="icon" class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+            ></path>
+          </svg>
+        </CategoryCard>
 
-      <CategoryCard
-        title="Video & Audio"
-        description="Convert and optimize media directly from your browser."
-        tools={videoTools}
-        iconBgClass="bg-teal-50"
-        iconTextClass="text-teal-500"
-      >
-        <svg slot="icon" class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-          ></path>
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
-      </CategoryCard>
+        <CategoryCard
+          title="Video & Audio"
+          description="Convert and optimize media directly from your browser."
+          tools={videoTools}
+          iconBgClass="bg-teal-50"
+          iconTextClass="text-teal-500"
+        >
+          <svg slot="icon" class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+            ></path>
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+        </CategoryCard>
 
-      <CategoryCard
-        title="Document Tools"
-        description="Convert DOCX to PDF through isolated temporary jobs."
-        tools={documentTools}
-        iconBgClass="bg-amber-50"
-        iconTextClass="text-amber-500"
-      >
-        <svg slot="icon" class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-          ></path>
-        </svg>
-      </CategoryCard>
+        <CategoryCard
+          title="Document Tools"
+          description="Convert DOCX to PDF through isolated temporary jobs."
+          tools={documentTools}
+          iconBgClass="bg-amber-50"
+          iconTextClass="text-amber-500"
+        >
+          <svg slot="icon" class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+            ></path>
+          </svg>
+        </CategoryCard>
+      </div>
     </div>
   </section>
 
-  {/* Popular Tools Section */}
-  <section id="tools" class="mx-auto max-w-[1200px] scroll-mt-8 px-4 py-12 sm:py-24 sm:px-6">
+  <section id="tools" class="mx-auto max-w-[1200px] scroll-mt-8 px-4 py-12 sm:px-6 sm:py-20">
     <div class="mb-8 sm:mb-10">
-      <span class="text-sm font-bold tracking-wider text-indigo-600 uppercase">Most Used</span>
+      <span class="text-sm font-bold uppercase tracking-wider text-indigo-600">All tools</span>
       <h2 class="mt-2 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
-        Popular tools
+        Choose a converter
       </h2>
       <p class="mt-3 text-slate-500">
-        Quick access to the most frequently used tools. Local where practical.
+        Start with one of the available reference tools. Processing stays local whenever supported.
       </p>
     </div>
 
@@ -211,36 +207,34 @@ const documentTools = tools
         ))
       }
 
-      {/* Search Empty State */}
       <div
         id="search-empty"
-        class="hidden col-span-full py-12 text-center text-slate-500 border-2 border-dashed border-slate-200 rounded-3xl"
+        class="col-span-full hidden rounded-2xl border-2 border-dashed border-slate-200 py-12 text-center text-slate-500"
       >
         No tools found matching your search.
       </div>
     </div>
   </section>
 
-  {/* Trust / Privacy Strip */}
-  <section class="mx-auto max-w-[1200px] px-4 sm:px-6 pb-12 sm:pb-24">
+  <section class="mx-auto max-w-[1200px] px-4 pb-12 sm:px-6 sm:pb-20">
     <div
-      class="grid gap-6 sm:gap-8 rounded-[2rem] sm:rounded-[2.5rem] bg-slate-900 p-6 sm:p-10 text-white md:grid-cols-3"
+      class="grid gap-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_8px_24px_rgba(15,23,42,0.05)] sm:grid-cols-3 sm:gap-8 sm:p-8"
     >
       <div>
-        <h2 class="font-bold text-lg">Local where practical</h2>
-        <p class="mt-2 text-sm leading-6 text-slate-400">
+        <h2 class="text-lg font-bold text-slate-950">Local where practical</h2>
+        <p class="mt-2 text-sm leading-6 text-slate-500">
           Image, PDF, and media reference tools run in isolated browser workers.
         </p>
       </div>
       <div>
-        <h2 class="font-bold text-lg">No silent fallback</h2>
-        <p class="mt-2 text-sm leading-6 text-slate-400">
+        <h2 class="text-lg font-bold text-slate-950">No silent fallback</h2>
+        <p class="mt-2 text-sm leading-6 text-slate-500">
           A local tool will never upload your file if the browser cannot process it.
         </p>
       </div>
       <div>
-        <h2 class="font-bold text-lg">Automatic cleanup</h2>
-        <p class="mt-2 text-sm leading-6 text-slate-400">
+        <h2 class="text-lg font-bold text-slate-950">Automatic cleanup</h2>
+        <p class="mt-2 text-sm leading-6 text-slate-500">
           Temporary server jobs (like DOCX to PDF) are canceled, expired, and deleted by design.
         </p>
       </div>
