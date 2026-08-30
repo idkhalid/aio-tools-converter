@@ -1,6 +1,6 @@
 # AIO Converter — Update Implementasi
 
-> Snapshot progres: 26 Agustus 2026
+> Snapshot progres: 29 Agustus 2026
 
 Dokumen ini merangkum kondisi implementasi yang benar-benar tersedia di repository saat ini. Isinya bukan daftar ide dari brief lama dan tidak menganggap fitur yang belum diuji sebagai selesai.
 
@@ -9,7 +9,7 @@ Dokumen ini merangkum kondisi implementasi yang benar-benar tersedia di reposito
 | Area                 | Status                    | Catatan                                                                                             |
 | -------------------- | ------------------------- | --------------------------------------------------------------------------------------------------- |
 | Fondasi monorepo     | Selesai                   | pnpm workspace, TypeScript strict, Astro, React, Go, lint, test, dan build scripts                  |
-| UI/UX dasar          | Selesai untuk baseline    | Responsif dan keyboard-accessible; visual final menunggu desain Figma                               |
+| UI/UX dasar          | Selesai untuk workspace   | Main Converter Workspace dan seluruh edge state production sudah responsif dan keyboard-accessible  |
 | PNG to JPG           | Selesai lintas-browser    | Lulus Chromium/Firefox/WebKit; menggunakan main-thread fallback jika OffscreenCanvas absen          |
 | Merge PDF            | Selesai                   | Diproses lokal di browser dengan pengaturan urutan file                                             |
 | Video to GIF         | Selesai                   | Diproses lokal dengan FFmpeg WebAssembly yang dimuat saat dibutuhkan                                |
@@ -17,7 +17,7 @@ Dokumen ini merangkum kondisi implementasi yang benar-benar tersedia di reposito
 | Dokumentasi GitHub   | Selesai                   | README publik, dokumentasi teknis, third-party notices, dan `.gitignore` sudah dirapikan            |
 | Lisensi & Compliance | Diblokir sementara        | GPL-3.0-or-later diadopsi, file lisensi & compliance tersedia; provenance FFmpeg diblokir sementara |
 | Repository GitHub    | Terhubung dengan CI aktif | Branch `main` mengikuti `origin/main`; GitHub Actions CI menjalankan quality gates dan E2E          |
-| Kesiapan production  | Belum                     | Masih menunggu provenance FFmpeg WASM dan desain visual final Figma                                 |
+| Kesiapan production  | Belum                     | Converter Workspace selesai; release masih menunggu provenance FFmpeg WASM                          |
 
 ## Fitur yang telah dibangun
 
@@ -83,7 +83,29 @@ Dokumen ini merangkum kondisi implementasi yang benar-benar tersedia di reposito
 - Related tools, breadcrumb, title, description, canonical URL, dan structured metadata mengikuti registry.
 - Nama aplikasi dapat diganti melalui `PUBLIC_APP_NAME`.
 - UI saat ini mobile-first, memiliki skip link, focus state, label form, status announcement, dan navigasi keyboard dasar.
-- Struktur UI sengaja dipisahkan dari processor agar skin Figma nanti dapat diterapkan tanpa menulis ulang engine konversi.
+- Struktur UI tetap dipisahkan dari processor sehingga edge state dan perubahan presentation dapat diterapkan tanpa menulis ulang engine konversi.
+
+## Converter Workspace edge states
+
+Implementasi edge-state production untuk Converter Workspace selesai pada 29 Agustus 2026. Perubahan tetap menggunakan visual baseline tool-shell yang sudah ada dan tidak mendesain ulang happy path.
+
+- **Unsupported File Type** menampilkan status `Unsupported file type`/`Unsupported format` dengan aksi menghapus atau mengganti file.
+- **File Too Large** menampilkan ukuran yang dipilih dan limit yang berlaku, termasuk aksi menghapus atau mengunggah file lebih kecil.
+- **Partial Success Batch** mempertahankan semua output yang berhasil, menyediakan bulk download untuk hasil sukses, dan aksi retry per file gagal.
+- **Cancelled State** mempertahankan file yang dipilih serta menyediakan `Start again` dan `Remove files`.
+- **Browser Not Supported** menyediakan arahan browser modern, pemilihan file lain, dan navigasi kembali ke katalog tool.
+- **Backend Unavailable** menggunakan pesan aman untuk tool server sementara, dengan aksi retry dan pemilihan file lain.
+- **Empty Result** menangani proses yang selesai tanpa output unduhan dengan aksi retry atau upload ulang.
+- **Mobile Sticky Action Bar** aktif hanya pada viewport mobile ketika file siap diproses atau hasil siap diunduh, memakai safe-area padding dan tambahan ruang bawah agar konten tidak tertutup.
+
+State machine tool-shell sekarang membedakan fase `canceled`, `partial-success`, dan `empty`. Perubahan hanya menyentuh presentation/state orchestration di `packages/ui/src/tool-shell`; processor browser, backend/API, worker, route, CI, compliance, package manifest, dan lockfile tidak diubah.
+
+Kontrak regresi berikut tetap dipertahankan:
+
+- Tombol proses tetap dapat diakses sebagai `getByRole("button", { name: "Process files" })`.
+- Elemen `#file-queue-heading + span` tetap menghasilkan `2 selected` untuk dua file.
+- PNG single download dan bulk ZIP tetap tersedia.
+- Reorder Merge PDF, flow DOCX to PDF, flow Video to GIF, dan output filename yang sudah ada tetap dipertahankan.
 
 ## Arsitektur pemrosesan
 
@@ -196,11 +218,18 @@ docs/
 | `pnpm test`                    | Lulus                                                           |
 | `go -C apps/api test ./...`    | Lulus                                                           |
 | `pnpm build`                   | Lulus                                                           |
+| Tool-shell reducer             | 8 test lulus                                                    |
+| Workspace regression E2E       | 36 lulus, 4 dilewati sesuai flag heavy-media                    |
 | `pnpm compliance`              | Sengaja digagalkan (blocked pending evidence provenance FFmpeg) |
+| Release Compliance Audit       | Blocker dikenal menjadi warning; error lain tetap hard-fail     |
 | Playwright + API Compose       | 41 lulus, 3 dilewati secara sengaja (total 44 test)             |
 | Matriks lifecycle container    | Success, cancel, timeout, disconnect, restart lulus             |
 
 Playwright penuh telah memeriksa route desktop/mobile, flow tool lokal, fallback HTMLCanvasElement, pemrosesan FFmpeg aktual, dan DOCX melalui API Compose di 3 browser (Chromium, Firefox, WebKit). Hasil akhirnya 41 test lulus dan 3 test dilewati secara sengaja (smoke FFmpeg hanya di Chromium desktop).
+
+Regresi terbaru untuk Converter Workspace dijalankan pada Chromium, Firefox, WebKit, dan mobile Chromium menggunakan `PLAYWRIGHT_SKIP_API_SERVER=1` serta `PLAYWRIGHT_SKIP_HEAVY_MEDIA=1`. Sebanyak 36 test lulus dan 4 test Video to GIF dilewati sesuai flag. Suite dijalankan dari workspace root agar konfigurasi `playwright.config.ts` di root digunakan. PNG batch ZIP, individual download, fallback canvas, Merge PDF reorder, route, metadata, responsive layout, dan kontrak mobile tetap lulus.
+
+Classifier Release Compliance Audit diperketat pada 29 Agustus 2026. CI sekarang hanya menerima satu baris blocker provenance FFmpeg yang persis dikenal sebagai warning; setiap `[COMPLIANCE ERROR]` lain tetap menggagalkan job. Regresi classifier memastikan output saat ini masuk jalur blocker yang dikenal, sedangkan simulasi `--enable-nonfree` tetap masuk jalur real failure.
 
 ## Audit lintas-browser 26 Agustus 2026
 
@@ -262,7 +291,7 @@ Validasi ini juga menemukan dan memperbaiki race hydration pada upload E2E, komp
 
 ## Yang belum selesai
 
-1. Menerapkan visual final setelah desain Figma siap.
+1. Review visual final untuk area aplikasi di luar Converter Workspace.
 2. Provenance/source tree dari `@ffmpeg/core` belum terselesaikan (blocked pending evidence).
 
 ## Prioritas berikutnya
@@ -280,11 +309,11 @@ Validasi ini juga menemukan dan memperbaiki race hydration pada upload E2E, komp
 - Exact corresponding source/provenance FFmpeg: **blocked pending evidence**.
 - Tindakan berikutnya: kompilasi WASM FFmpeg secara lokal dari source tree terverifikasi, atau ganti dengan custom build LGPL-only yang telah direview.
 
-### P1 — Design pass
+### P1 — Design pass Converter Workspace (selesai)
 
-- Sinkronkan token warna, typography, spacing, radius, elevation, dan component states dari Figma.
-- Pertahankan kontrak `ToolShell` dan processor agar perubahan hanya menyentuh presentation layer.
-- Uji kembali mobile, keyboard, focus, error, empty, loading, dan result states setelah reskin.
+- Main Converter Workspace tetap menjadi visual baseline; happy path tidak didesain ulang pada edge-state pass.
+- Unsupported, oversized, partial success, cancelled, browser unsupported, backend unavailable, empty result, dan mobile sticky action bar sudah diterapkan.
+- Kontrak `ToolShell`, processor, nama file output, mobile layout, keyboard, focus, dan announcement tetap dipertahankan.
 
 ### P1 — Release confidence (selesai)
 
