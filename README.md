@@ -5,89 +5,96 @@
 <h1 align="center">AIO Converter</h1>
 
 <p align="center">
-  A modular file-conversion platform with local browser processing and short-lived server jobs for formats that require native applications.
+  A browser-first file conversion toolbox with transparent privacy boundaries and a small, focused Phase&nbsp;1 toolset.
 </p>
 
 <p align="center">
-  <a href="#phase-1-features">Features</a> &middot;
-  <a href="#quick-start">Quick start</a> &middot;
+  <a href="#phase-1-tools">Tools</a> &middot;
+  <a href="#privacy-model">Privacy</a> &middot;
   <a href="#architecture">Architecture</a> &middot;
-  <a href="#testing">Testing</a> &middot;
-  <a href="#deployment">Deployment</a>
+  <a href="#demo-and-staging">Demo</a> &middot;
+  <a href="#local-development">Local development</a> &middot;
+  <a href="#testing">Testing</a>
 </p>
 
-> **Status: Phase 1 / beta.** The application foundation and four Phase 1 tools are functional. The current UI/UX is a responsive, keyboard-accessible baseline while the final design is being prepared in Figma.
-> Release status: public source available. Production release is blocked pending FFmpeg WASM provenance verification.
+> **Phase 1 status: preview-ready, not production-ready.** The four Phase 1 tools, Converter Workspace edge states, global visual system, and staging path are implemented. A production or tagged release remains blocked while FFmpeg WASM provenance awaits evidence.
 
-## Phase 1 features
+## What it is
 
-| Tool         | Processing mode  | Key limits                              | Output                        |
-| ------------ | ---------------- | --------------------------------------- | ----------------------------- |
-| PNG to JPG   | Local in browser | 1-50 files, 50 MiB/file, 200 MiB total  | Individual JPG files or ZIP   |
-| Merge PDF    | Local in browser | 2-20 files, 50 MiB/file, 250 MiB total  | One PDF in the selected order |
-| Video to GIF | Local in browser | 1 file, 150 MiB, maximum 30-second clip | GIF                           |
-| DOCX to PDF  | Ephemeral server | 1 file, 50 MiB                          | One-time PDF download         |
+AIO Converter is a compact SaaS-style conversion app for everyday files. It keeps tools that can run safely in the browser on the device, and uses a deliberately short-lived server workflow only where a native application is necessary. The result is a clear product boundary: users can see whether a file stays local or is processed ephemerally before they start.
 
-Every tool uses the same strongly typed registry for routes, metadata, validation, options, limits, privacy badges, and processor mappings. New tool variants do not require rebuilding the page from scratch.
+## Phase 1 tools
+
+| Tool         | Route                   | Processing       | Phase 1 capability                                                                                     |
+| ------------ | ----------------------- | ---------------- | ------------------------------------------------------------------------------------------------------ |
+| PNG to JPG   | `/image/png-to-jpg`     | Browser-local    | Converts one or many PNG files to JPG, with quality/background controls and ZIP output for batches.    |
+| Merge PDF    | `/pdf/merge-pdf`        | Browser-local    | Combines selected PDFs in the user-controlled queue order.                                             |
+| Video to GIF | `/video/video-to-gif`   | Browser-local    | Converts a short MP4, WebM, or MOV clip to GIF with duration, FPS, and width controls.                 |
+| DOCX to PDF  | `/document/docx-to-pdf` | Server-ephemeral | Converts one validated DOCX through an isolated LibreOffice runner and offers a one-time PDF download. |
+
+All four routes share the same typed tool registry, metadata, validation, privacy labels, accessibility contracts, and responsive Converter Workspace behavior.
 
 ## Privacy model
 
-AIO Converter exposes two processing paths clearly to users:
+### Browser-local tools
 
-- **`LOCAL_ONLY`** - PNG to JPG, Merge PDF, and Video to GIF run in browser Web Workers. Files are never sent to the API, and there is no hidden upload fallback.
-- **`SERVER_EPHEMERAL`** - DOCX to PDF uses the Go API and an isolated LibreOffice runner. Inputs and outputs live in tmpfs, job metadata exists only in memory, output can be downloaded only once, and data is removed after completion, cancellation, failure, timeout, shutdown, or TTL expiry.
+PNG to JPG, Merge PDF, and Video to GIF are `LOCAL_ONLY`. Their files are processed in the browser through browser processors and workers where supported; they are not sent to the job API, and there is no silent server fallback.
 
-Server file responses use `Cache-Control: private, no-store`. Original filenames are not stored in job metadata, and user binaries are never written to a database, object storage, analytics, or application logs.
+### Ephemeral server tool
+
+DOCX to PDF is `SERVER_EPHEMERAL` because LibreOffice cannot run in the browser. The Go API streams the upload to a temporary job area, forwards work to an isolated LibreOffice runner over a Unix socket, and removes inputs and outputs through the job lifecycle. Job metadata stays in memory, output is available for one download, and API file responses use `Cache-Control: private, no-store`.
+
+This is a practical privacy model, not a blanket compliance guarantee. Review the [security and privacy caveats](#security-and-privacy-caveats) before using the service with sensitive material.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    U[Browser] --> R[Typed tool registry + ToolShell]
-    R -->|LOCAL_ONLY| W[Dedicated Web Worker]
-    W --> B[Blob or ZIP download]
-    R -->|SERVER_EPHEMERAL| A[Go job API]
-    A -->|Unix socket| O[Isolated LibreOffice runner]
-    O --> D[One-time PDF download]
-```
-
-| Layer            | Technology                               | Responsibility                                                        |
-| ---------------- | ---------------------------------------- | --------------------------------------------------------------------- |
-| Web              | Astro 7, React 19, Tailwind CSS 4        | Static routes, generic tool shell, SEO, and accessibility             |
-| Browser engine   | Web Worker, pdf-lib, ffmpeg.wasm, fflate | Local conversion, progress, cancellation, and output downloads        |
-| API              | Go 1.24                                  | Streaming uploads, job lifecycle, SSE, one-time download, and cleanup |
-| Office runner    | LibreOffice in a container               | DOCX conversion without network access or persistent storage          |
-| Shared contracts | TypeScript workspace packages            | Registry, validation, processor contracts, and cross-app helpers      |
-
-Main repository structure:
-
 ```text
-apps/
-  web/                 Astro frontend and Playwright E2E
-  api/                 Go API, office runner, and integration tests
-packages/
-  tool-core/           Shared contracts and validation
-  tool-registry/       Tool definitions and processor manifest
-  browser-processors/  Image, PDF, FFmpeg, and ZIP processors
-  server-contracts/    Job API client and SSE contract
-  ui/                  Generic ToolShell and state machine
-  shared/              Binary, MIME, and filename helpers
-docs/                  Architecture, development, and deployment guides
+Astro static pages + React interactive workspace
+                 |
+                 v
+        Typed tool registry and contracts
+          |                       |
+          | LOCAL_ONLY            | SERVER_EPHEMERAL
+          v                       v
+Browser processors/workers      Go job API
+  -> Blob or ZIP download          |
+                                  v
+                    Unix socket -> LibreOffice runner
+                                  |
+                                  v
+                       one-time PDF download
 ```
 
-See [docs/architecture.md](docs/architecture.md) for processing flows and security invariants.
+| Layer              | Technology                                      | Responsibility                                                                          |
+| ------------------ | ----------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Frontend           | Astro, React, Tailwind CSS                      | Static routes, metadata, accessibility, and the Converter Workspace.                    |
+| Registry           | Typed TypeScript workspace packages             | Tool routes, limits, options, privacy mode, SEO metadata, and processor mapping.        |
+| Browser processing | Web Workers, `pdf-lib`, `ffmpeg.wasm`, `fflate` | Local conversion, progress, cancellation, and download creation.                        |
+| Server processing  | Go API                                          | Streaming DOCX uploads, job lifecycle, events, one-time output, and cleanup.            |
+| Office runner      | LibreOffice container                           | Network-isolated document conversion with temporary scratch storage.                    |
+| Deployment         | Docker Compose                                  | Connects the API and office runner through a Unix socket with security/resource limits. |
 
-## Quick start
+Read [the architecture guide](docs/architecture.md) for processing flows and security invariants.
+
+## Demo and staging
+
+The supported preview path uses a static host such as Cloudflare Pages for `apps/web/dist`, plus Docker Compose on a VPS for the Go API and LibreOffice runner. A Cloudflare Tunnel can expose the loopback-only API without directly publishing its port.
+
+Use fixed HTTPS staging origins for `PUBLIC_APP_URL`, `PUBLIC_API_URL`, and `API_ALLOWED_ORIGINS`. Keep real domains, VPS addresses, tunnel credentials, and processor tokens out of Git. The full reproducible setup, including CSP/CORS verification, health checks, smoke tests, cleanup checks, and a placeholder-only Tunnel configuration, is in [docs/deployment.md](docs/deployment.md).
+
+Staging/demo deployment is appropriate for preview and portfolio use. It is not a production release claim while the FFmpeg provenance gate remains unresolved.
+
+## Local development
 
 ### Prerequisites
 
 - Node.js 22.14 or newer
 - Corepack and pnpm 11
-- Go 1.24 or newer
-- Docker Compose for DOCX to PDF
-- Playwright Chromium for E2E testing
+- Go 1.24 or newer for API checks
+- Docker Compose for DOCX-to-PDF and full-stack E2E
+- Playwright Chromium for browser E2E
 
-### Frontend and local tools
+### Frontend and browser-local tools
 
 ```bash
 corepack enable
@@ -95,59 +102,31 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open <http://localhost:4321>. The three `LOCAL_ONLY` tools work without a backend. FFmpeg assets are generated automatically from the resolved dependency during `dev` or `build` and do not need to be stored in Git. This copy/compression step is not an FFmpeg source build or provenance evidence; production and tagged distribution remain blocked by the FFmpeg compliance gate.
+Open <http://localhost:4321>. PNG to JPG, Merge PDF, and Video to GIF work without the API. Copy `.env.example` to an ignored `.env` only when local defaults need overriding.
 
-### Full stack
+### Docker/API quickstart
 
-Copy `.env.example` to `.env` only when you need to override the default configuration, then run:
+Start the document-processing stack in a second terminal:
 
 ```bash
-pnpm dev:docker
+docker compose up --build -d
+docker compose ps
+curl --fail --show-error http://127.0.0.1:8080/healthz
 ```
 
-This command starts the frontend and builds the API plus LibreOffice runner stack. The API is published only on `127.0.0.1:8080`; the office runner has no public port or network access.
+The API is bound to `127.0.0.1:8080`; the LibreOffice runner has no published port and no network access. For a single command that starts the frontend and API together, use `pnpm dev:docker`.
 
-See [docs/development.md](docs/development.md) for the complete development guide.
-
-## Commands
-
-| Command             | Purpose                                               |
-| ------------------- | ----------------------------------------------------- |
-| `pnpm dev`          | Start the Astro frontend                              |
-| `pnpm dev:api`      | Start the backend through Docker Compose              |
-| `pnpm dev:docker`   | Start the frontend and backend together               |
-| `pnpm build`        | Build every workspace package and verify the Go build |
-| `pnpm lint`         | Run ESLint and `go vet`                               |
-| `pnpm typecheck`    | Check TypeScript and Astro                            |
-| `pnpm test`         | Run JavaScript unit tests and Go tests                |
-| `pnpm test:e2e`     | Run the Playwright E2E suite                          |
-| `pnpm format:check` | Check source formatting                               |
-| `pnpm compliance`   | Audit release licenses and FFmpeg provenance          |
-
-## Configuration
-
-Local configuration belongs in `.env`. A safe, commit-ready template is available at [.env.example](.env.example).
-
-| Variable                  | Development default     | Purpose                                 |
-| ------------------------- | ----------------------- | --------------------------------------- |
-| `PUBLIC_APP_NAME`         | `AIO Converter`         | Application name in the UI and metadata |
-| `PUBLIC_APP_URL`          | `http://localhost:4321` | Canonical frontend origin               |
-| `PUBLIC_API_URL`          | `http://localhost:8080` | Job API base URL                        |
-| `API_ALLOWED_ORIGINS`     | `http://localhost:4321` | Allowed frontend origin                 |
-| `API_JOB_TTL`             | `15m`                   | Maximum lifetime of an ephemeral job    |
-| `API_MAX_CONCURRENT_JOBS` | `1`                     | Active office jobs per instance         |
-
-Do not commit `.env`, processor tokens, credentials, or user files. All backend variables and limits are documented in `.env.example`.
+See [docs/development.md](docs/development.md) for browser compatibility, staging-like builds, and E2E prerequisites.
 
 ## Testing
 
-Install the Playwright browser once on each development machine:
+Install Playwright Chromium once per development machine:
 
 ```bash
 pnpm exec playwright install chromium
 ```
 
-Run all quality gates before pushing or creating a release:
+Run the standard quality gates from the repository root:
 
 ```bash
 pnpm format:check
@@ -156,53 +135,39 @@ pnpm typecheck
 pnpm test
 pnpm build
 pnpm test:e2e
-pnpm compliance
 ```
 
-`pnpm test:e2e` requires Docker for the DOCX-to-PDF smoke test. Set `PLAYWRIGHT_SKIP_API_SERVER=1` for a browser-only audit, but that mode does not replace container-stack validation.
+`pnpm test:e2e` needs Docker for the DOCX-to-PDF flow. `pnpm compliance` is also part of release review; its known FFmpeg provenance blocker is documented below and does not make a production release acceptable.
 
-Until FFmpeg Corresponding Source provenance is completed, `pnpm compliance` is expected to fail only with the documented FFmpeg provenance blocker. Missing assets, hash mismatches, nonfree configuration, or any other compliance errors are not acceptable expected failures.
+## Security and privacy caveats
 
-Phase 1 automated E2E coverage targets desktop and mobile Chromium. Safari and Firefox still require manual testing before claiming production-grade cross-browser support.
+- Browser-local tools do not use the job API, but Video to GIF can consume substantial memory and may not be suitable for low-end devices or long clips.
+- DOCX-to-PDF files are intentionally short-lived, but LibreOffice fidelity depends on the fonts and capabilities available in the runner image; a PDF may not precisely match Microsoft Word layout.
+- The API is designed for temporary processing, not as a persistent file store. Do not assume it meets a regulated-data requirement without an environment-specific security review.
+- Staging deployments should use HTTPS, exact-origin CORS, the existing CSP/security headers, and a loopback-only API behind an approved proxy or Tunnel. Do not weaken those controls to work around a deployment issue.
+- Do not commit `.env` files, user documents, real domains, server IPs, tunnel credentials, or processor tokens.
 
-## Deployment
+## Release status and compliance
 
-The frontend builds to static output in `apps/web/dist` and can be hosted on Cloudflare Pages. The API and LibreOffice runner must run on a separate container host that supports tmpfs, resource limits, Unix sockets, and an HTTPS reverse proxy.
+| Area                         | Current status                                  |
+| ---------------------------- | ----------------------------------------------- |
+| Source license               | **GPL-3.0-or-later**                            |
+| Public source repository     | OK                                              |
+| FFmpeg WASM provenance       | **Blocked pending evidence**                    |
+| Production or tagged release | **Blocked until FFmpeg provenance is resolved** |
 
-Set `PUBLIC_APP_URL` and `PUBLIC_API_URL` before a production build. CSP and `connect-src` are generated at build time. See [docs/deployment.md](docs/deployment.md) for headers, origins, metrics, cleanup rules, and the production checklist.
+The repository can be shared publicly under GPL-3.0-or-later. However, the prebuilt FFmpeg WASM artifact does not yet have verified corresponding-source/build provenance. That evidence, or an audited replacement runtime, must be in place before a production deployment or tagged release. See [the FFmpeg provenance gate](docs/compliance/ffmpeg.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
 
-## Adding a tool
+## Roadmap
 
-1. Add the tool definition and limits to `packages/tool-registry`.
-2. Reuse an existing processor or preset, or implement a new processor that follows the `tool-core` contract.
-3. Register the processor mapping in the manifest.
-4. Add help content, unit tests, and E2E coverage for critical flows.
-
-Routes, metadata, privacy badges, initial validation, options, and related tools are derived from the registry. See [docs/architecture.md](docs/architecture.md) for details.
-
-## Current limitations
-
-- The UI is intentionally a basic visual foundation so it can be adapted once the Figma design is ready.
-- Video to GIF uses WebAssembly and may require significant memory on low-end devices.
-- DOCX fidelity depends on the fonts and LibreOffice capabilities in the runner image; output is not guaranteed to match Microsoft Word exactly.
-- Full DOCX E2E testing requires a healthy Docker and LibreOffice container stack.
-- Every tool is still marked beta, and the project is not positioned as a production-ready service.
-
-## License and release gate
-
-The AIO Converter source code is licensed under the **GPL-3.0-or-later**.
-
-Third-party components remain under their own licenses. The project name, logo, and brand assets are not granted under the GPL.
-
-The current FFmpeg WASM artifact is byte-identified but its exact source/build chain is not verified. See [FFmpeg WASM provenance and release gate](docs/compliance/ffmpeg.md) before any production or tagged release.
-
-Copyright (C) 2026 Idham Khalid.
-
-See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the dependency inventory and compliance notes.
+1. Resolve the FFmpeg WASM provenance evidence required for release confidence.
+2. Deploy and operate the documented preview/staging environment.
+3. Add further tools only after the release/compliance baseline is satisfied.
 
 ## Documentation
 
 - [Architecture and privacy model](docs/architecture.md)
-- [Development setup and browser compatibility](docs/development.md)
-- [Deployment and production checklist](docs/deployment.md)
+- [Local development and browser compatibility](docs/development.md)
+- [Staging/preview deployment guide](docs/deployment.md)
+- [FFmpeg provenance and release gate](docs/compliance/ffmpeg.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)

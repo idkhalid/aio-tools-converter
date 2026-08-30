@@ -1,44 +1,44 @@
 # Development
 
-## Prasyarat
+## Prerequisites
 
-- Node.js 22.14 atau lebih baru
-- Corepack dan pnpm 11
-- Go 1.24 atau lebih baru
-- Docker Compose untuk DOCX-to-PDF end-to-end
-- Chromium Playwright untuk E2E
+- Node.js 22.14 or newer
+- Corepack and pnpm 11
+- Go 1.24 or newer
+- Docker Compose for end-to-end DOCX-to-PDF
+- Playwright Chromium for E2E testing
 
-## Setup awal
+## Initial setup
 
 ```bash
 corepack enable
-pnpm install
+pnpm install --frozen-lockfile
 pnpm exec playwright install chromium
 ```
 
-Salin `.env.example` menjadi `.env` bila perlu mengubah origin, URL API, limit, atau timeout. Nilai bawaan source hanya ditujukan untuk development lokal.
+Copy `.env.example` to `.env` when you need to change an origin, API URL, limit, or timeout. The source defaults are intended for local development only.
 
-## Menjalankan aplikasi
+## Running the application
 
-Frontend lokal (tiga tool `LOCAL_ONLY` langsung dapat digunakan):
+Run the local frontend to use the three `LOCAL_ONLY` tools immediately:
 
 ```bash
 pnpm dev
 ```
 
-Agar DOCX-to-PDF benar-benar berjalan melalui LibreOffice terisolasi, jalankan frontend bersama stack container:
+To run DOCX-to-PDF through the isolated LibreOffice workflow, start the frontend with the container stack:
 
 ```bash
 pnpm dev:docker
 ```
 
-Atau jalankan backend saja:
+Or start only the backend:
 
 ```bash
 pnpm dev:api
 ```
 
-`office-runner` ikut dimulai sebagai dependency dan tidak memublikasikan port atau memiliki akses network.
+`office-runner` starts as a dependency. It has no published port and no network access.
 
 ## Quality gates
 
@@ -63,38 +63,38 @@ pnpm --filter @aio-converter/web build
 
 Use real staging origins only in local ignored environment files or the deployment provider. The full Pages, Compose, Tunnel, CORS, and smoke-test procedure is in [deployment.md](deployment.md).
 
-API Go dapat diuji terpisah tanpa LibreOffice pada host karena integration test memakai processor yang diinjeksi:
+The Go API can be tested on the host without LibreOffice because its integration tests use an injected processor:
 
 ```bash
 cd apps/api
 go test ./...
 ```
 
-`pnpm test:e2e` mengharuskan Docker karena mencakup server tool. Untuk audit browser-only ketika Docker tidak tersedia, set `PLAYWRIGHT_SKIP_API_SERVER=1`; hasil tersebut tidak menggantikan smoke test DOCX container.
+`pnpm test:e2e` requires Docker because it covers the server tool. For a browser-only audit when Docker is unavailable, set `PLAYWRIGHT_SKIP_API_SERVER=1`; that result does not replace the containerized DOCX smoke test.
 
-## Kompatibilitas browser
+## Browser compatibility
 
-| Jalur        | Kebutuhan minimum                                                    | Catatan                                                                                                   |
-| ------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| PNG to JPG   | Web Worker, `createImageBitmap`, dan `OffscreenCanvas.convertToBlob` | Diuji di Chromium desktop/mobile; browser tanpa codec worker mendapat error lokal, tanpa upload fallback. |
-| Merge PDF    | Web Worker, Blob, dan ArrayBuffer                                    | Tidak bergantung pada server.                                                                             |
-| Video to GIF | WebAssembly, Web Worker, Blob URL, dan memori perangkat yang cukup   | Cold start mengunduh core terkompresi sekitar 10 MiB.                                                     |
-| DOCX to PDF  | Fetch, multipart, dan SSE                                            | Membutuhkan API serta `office-runner`; fidelity mengikuti LibreOffice/font container.                     |
+| Tool         | Minimum requirements                                                 | Notes                                                                                                                          |
+| ------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| PNG to JPG   | Web Worker, `createImageBitmap`, and `OffscreenCanvas.convertToBlob` | Tested in desktop and mobile Chromium; browsers without the required worker codec show a local error, with no upload fallback. |
+| Merge PDF    | Web Worker, Blob, and ArrayBuffer                                    | Does not depend on a server.                                                                                                   |
+| Video to GIF | WebAssembly, Web Worker, Blob URL, and sufficient device memory      | A cold start downloads a compressed core of about 10 MiB.                                                                      |
+| DOCX to PDF  | Fetch, multipart, and SSE                                            | Requires the API and `office-runner`; fidelity follows LibreOffice and the container fonts.                                    |
 
-Target build Astro saat ini mencakup Chrome/Edge 111, Firefox 114, dan Safari/iOS 16.4 atau yang lebih baru. E2E otomatis Phase 1 memakai Chromium; uji manual Safari/Firefox tetap diperlukan sebelum menyatakan dukungan produksi lintas-browser.
+The current Astro build target includes Chrome/Edge 111, Firefox 114, and Safari/iOS 16.4 or newer. Phase 1 automated E2E uses Chromium; manual Safari and Firefox testing is still required before claiming production-grade cross-browser support.
 
-## Runtime FFmpeg
+## FFmpeg runtime
 
-Core FFmpeg dimuat secara lazy saat tool Video to GIF dijalankan. Vite menerbitkan entry ESM `@ffmpeg/core` sebagai asset build yang dapat di-import worker, sedangkan script web hanya meng-gzip WASM dari dependency ke `apps/web/public/wasm` sebelum dev/build. Browser worker baru mengambil dan membuka `.wasm.gz` saat tool dijalankan; loader menerima byte gzip maupun WASM yang sudah didekode transparan oleh development server. Raw WASM 32 MiB tidak masuk output deployment dan folder hasil generasi tidak perlu disimpan di Git.
+The FFmpeg core loads lazily when Video to GIF runs. Vite publishes the `@ffmpeg/core` ESM entry as a build asset that the worker can import, while the web script only gzips WASM from the dependency into `apps/web/public/wasm` before `dev` or `build`. The browser worker fetches and opens `.wasm.gz` only when the tool runs; the loader accepts both gzip bytes and WASM transparently decoded by the development server. The 32 MiB raw WASM is excluded from deployment output, and generated assets do not need to be committed to Git.
 
-## Batas Phase 1
+## Phase 1 limits
 
-- PNG transparan diratakan ke warna background yang dipilih saat menjadi JPG.
-- Merge PDF menolak input encrypted atau rusak; tidak ada repair diam-diam.
-- Video to GIF dibatasi untuk clip pendek karena FFmpeg WebAssembly memakai RAM perangkat.
-- DOCX-to-PDF tidak menjamin layout identik dengan Microsoft Word; hasil mengikuti font dan kemampuan LibreOffice di image runner.
-- UI saat ini adalah skin dasar yang mobile-first dan keyboard-accessible. Visual final dapat diganti tanpa memindahkan engine.
+- Transparent PNG files are flattened to the selected background color when converted to JPG.
+- Merge PDF rejects encrypted or corrupt input; it does not silently repair documents.
+- Video to GIF is limited to short clips because FFmpeg WebAssembly uses device memory.
+- DOCX-to-PDF does not guarantee a layout identical to Microsoft Word; output follows the fonts and LibreOffice capabilities in the runner image.
+- The Converter Workspace and global areas use a mobile-first, keyboard-accessible Phase 1 visual baseline. Future visual work must preserve existing processor, accessibility, and edge-state contracts.
 
-## Gate lisensi sebelum rilis
+## License gate before release
 
-Runtime prebuilt `@ffmpeg/core` yang dipakai Phase 1 mendeklarasikan `GPL-2.0-or-later`. Proyek ini tetap `UNLICENSED` sampai pemilik menentukan lisensi, jadi Video to GIF tidak boleh dirilis tanpa keputusan compliance yang eksplisit. Lihat `THIRD_PARTY_NOTICES.md`; opsi teknisnya adalah memenuhi kewajiban distribusi GPL atau mengganti runtime dengan custom build FFmpeg LGPL-only yang sudah diaudit.
+AIO Converter source is licensed under `GPL-3.0-or-later`, and the public repository may be shared. The Phase 1 prebuilt `@ffmpeg/core` runtime declares `GPL-2.0-or-later`, but the corresponding source and build provenance for its WASM artifact still lack verified evidence. Therefore, production deployment and tagged releases that distribute the current Video to GIF runtime remain blocked until evidence is available or the runtime is replaced with an audited build. See `THIRD_PARTY_NOTICES.md` and the [FFmpeg provenance gate](compliance/ffmpeg.md).
