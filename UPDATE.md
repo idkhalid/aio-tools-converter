@@ -1,336 +1,357 @@
-# AIO Converter — Update Implementasi
+# AIO Converter - Implementation Update
 
-> Snapshot progres: 29 Agustus 2026
+> Progress snapshot: August 30, 2026
 
-Dokumen ini merangkum kondisi implementasi yang benar-benar tersedia di repository saat ini. Isinya bukan daftar ide dari brief lama dan tidak menganggap fitur yang belum diuji sebagai selesai.
+This document summarizes the implementation that is actually available in the repository. It is not an ideas list from an earlier brief and does not treat untested features as complete.
 
-## Ringkasan status
+## 2026-08-30 - Local Docker API via Cloudflare Tunnel
 
-| Area                 | Status                    | Catatan                                                                                             |
-| -------------------- | ------------------------- | --------------------------------------------------------------------------------------------------- |
-| Fondasi monorepo     | Selesai                   | pnpm workspace, TypeScript strict, Astro, React, Go, lint, test, dan build scripts                  |
-| UI/UX dasar          | Selesai untuk workspace   | Main Converter Workspace dan seluruh edge state production sudah responsif dan keyboard-accessible  |
-| PNG to JPG           | Selesai lintas-browser    | Lulus Chromium/Firefox/WebKit; menggunakan main-thread fallback jika OffscreenCanvas absen          |
-| Merge PDF            | Selesai                   | Diproses lokal di browser dengan pengaturan urutan file                                             |
-| Video to GIF         | Selesai                   | Diproses lokal dengan FFmpeg WebAssembly yang dimuat saat dibutuhkan                                |
-| DOCX to PDF          | Selesai untuk Phase 1     | Compose sehat; matriks lifecycle nyata dan E2E UI-to-LibreOffice sudah lulus                        |
-| Dokumentasi GitHub   | Selesai                   | README publik, dokumentasi teknis, third-party notices, dan `.gitignore` sudah dirapikan            |
-| Lisensi & Compliance | Diblokir sementara        | GPL-3.0-or-later diadopsi, file lisensi & compliance tersedia; provenance FFmpeg diblokir sementara |
-| Repository GitHub    | Terhubung dengan CI aktif | Branch `main` mengikuti `origin/main`; GitHub Actions CI menjalankan quality gates dan E2E          |
-| Kesiapan production  | Belum                     | Converter Workspace selesai; release masih menunggu provenance FFmpeg WASM                          |
+Local Docker backend was exposed through Cloudflare Tunnel at:
 
-## Fitur yang telah dibangun
+- API base URL: `https://api.atv-market.com`
+- Health check: `/healthz`
+- DOCX to PDF job creation: passed through tunnel
+- Server-Sent Events: passed through tunnel
+- One-time PDF output download: verified through tunnel
+- CORS preflight from `http://localhost:4321`: passed
+- Backend mode: local Docker API + office runner behind Cloudflare Tunnel
+
+Verified flow:
+
+```text
+POST /v1/jobs/document.docx-to-pdf
+  -> 202 Accepted
+  -> SSE status succeeded
+  -> output PDF downloaded successfully
+```
+
+## Status summary
+
+| Area                   | Status                     | Notes                                                                                                             |
+| ---------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Monorepo foundation    | Complete                   | pnpm workspace, strict TypeScript, Astro, React, Go, lint, test, and build scripts                                |
+| Core UI/UX             | Complete for the workspace | The main Converter Workspace and all production edge states are responsive and keyboard-accessible                |
+| PNG to JPG             | Complete across browsers   | Passed in Chromium, Firefox, and WebKit; uses a main-thread fallback when `OffscreenCanvas` is unavailable        |
+| Merge PDF              | Complete                   | Processed locally in the browser with configurable file order                                                     |
+| Video to GIF           | Complete                   | Processed locally with lazily loaded FFmpeg WebAssembly                                                           |
+| DOCX to PDF            | Complete for Phase 1       | Compose is healthy; the real lifecycle matrix and UI-to-LibreOffice E2E have passed                               |
+| GitHub documentation   | Complete                   | Public README, technical documentation, third-party notices, and `.gitignore` have been polished                  |
+| License and compliance | Temporarily blocked        | GPL-3.0-or-later adopted; license and compliance files are present; FFmpeg provenance is blocked pending evidence |
+| GitHub repository      | Connected with active CI   | The `main` branch follows `origin/main`; GitHub Actions CI runs quality gates and E2E                             |
+| Production readiness   | Not yet                    | The Converter Workspace is complete; release still awaits FFmpeg WASM provenance                                  |
+
+## Implemented features
 
 ### 1. PNG to JPG
 
-- Mode `LOCAL_ONLY`; file tidak dikirim ke server.
-- Mendukung 1–50 file PNG.
-- Batas 50 MiB per file dan 200 MiB total.
-- Pengaturan kualitas JPG 1–100.
-- Warna background dapat dipilih untuk meratakan transparansi PNG.
-- Hasil tunggal dapat diunduh langsung; hasil batch dapat dikemas menjadi ZIP.
-- Validasi extension, MIME, signature PNG, dan dimensi gambar dilakukan sebelum pemrosesan utama.
-- Batas maksimum 40 juta pixel membantu menolak gambar yang berisiko menghabiskan memori.
-- Pemrosesan berjalan pada dedicated Web Worker, atau fallback ke main-thread HTMLCanvasElement jika browser tidak mendukung `OffscreenCanvas`.
+- `LOCAL_ONLY` mode; files are not sent to the server.
+- Supports 1-50 PNG files.
+- 50 MiB limit per file and 200 MiB total.
+- JPG quality setting from 1-100.
+- A background color can be selected to flatten PNG transparency.
+- A single result can be downloaded directly; batch results can be packaged as a ZIP.
+- Extension, MIME, PNG signature, and image-dimension validation happen before main processing.
+- A maximum of 40 million pixels helps reject images that could consume excessive memory.
+- Processing runs in a dedicated Web Worker, with a main-thread `HTMLCanvasElement` fallback when the browser does not support `OffscreenCanvas`.
 
 ### 2. Merge PDF
 
-- Mode `LOCAL_ONLY`; seluruh PDF tetap berada di perangkat pengguna.
-- Mendukung 2–20 file.
-- Batas 50 MiB per file dan 250 MiB total.
-- File dapat diurutkan ulang sebelum digabungkan.
-- Urutan halaman hasil mengikuti urutan file pada queue.
-- Processor membatasi jumlah halaman total hingga 1.000 halaman.
-- PDF rusak atau encrypted ditolak dengan pesan error aman; tidak ada repair tersembunyi.
-- Pemrosesan berjalan pada dedicated Web Worker menggunakan `pdf-lib`.
+- `LOCAL_ONLY` mode; all PDFs remain on the user's device.
+- Supports 2-20 files.
+- 50 MiB limit per file and 250 MiB total.
+- Files can be reordered before merging.
+- Output page order follows the file order in the queue.
+- The processor limits the total number of pages to 1,000.
+- Corrupt or encrypted PDFs are rejected with safe error messages; there is no hidden repair step.
+- Processing runs in a dedicated Web Worker using `pdf-lib`.
 
 ### 3. Video to GIF
 
-- Mode `LOCAL_ONLY` untuk MP4, WebM, dan MOV.
-- Satu file dengan ukuran maksimal 150 MiB.
-- Clip dapat dipilih dari 1–30 detik.
-- Pengaturan FPS 5–20 dan lebar output 160–960 pixel.
-- FFmpeg WebAssembly dimuat secara lazy hanya ketika tool digunakan.
-- Runtime WASM disimpan sebagai asset gzip sekitar 10 MiB; raw WASM sekitar 32 MiB tidak masuk output deployment.
-- Mendukung progress, cancel, retry, cleanup worker, dan pencabutan object URL.
-- Asset FFmpeg hasil `predev`/`prebuild` diabaikan oleh Git karena dapat dibuat ulang dari dependency.
+- `LOCAL_ONLY` mode for MP4, WebM, and MOV.
+- One file with a maximum size of 150 MiB.
+- A clip can be selected from 1-30 seconds.
+- FPS setting from 5-20 and output width from 160-960 pixels.
+- FFmpeg WebAssembly is loaded lazily only when the tool is used.
+- The WASM runtime is stored as a gzip asset of about 10 MiB; the raw WASM of about 32 MiB is excluded from deployment output.
+- Supports progress, cancellation, retry, worker cleanup, and object-URL revocation.
+- FFmpeg assets generated by `predev`/`prebuild` are ignored by Git because they can be recreated from the dependency.
 
 ### 4. DOCX to PDF
 
-- Mode `SERVER_EPHEMERAL` karena LibreOffice tidak berjalan langsung di browser.
-- Satu file DOCX dengan ukuran maksimal 50 MiB.
-- Browser membuat job ke API Go melalui multipart upload.
-- DOCX divalidasi sebagai OOXML ZIP, termasuk signature, struktur entry, traversal, duplikasi, encryption, macro-enabled content, compression ratio, dan expanded size.
-- Progress/status dikirim melalui Server-Sent Events.
-- Output PDF hanya dapat diunduh satu kali.
-- Output diperiksa kembali melalui signature PDF dan EOF marker sebelum tersedia untuk download.
-- Job dapat dibatalkan dan memiliki timeout serta TTL maksimal 15 menit secara default.
-- Input dihapus setelah processor selesai; output dibersihkan setelah download, cancel, error, timeout, shutdown, atau TTL.
-- Fidelity mengikuti font dan kemampuan LibreOffice di container sehingga tidak dijamin identik dengan Microsoft Word.
+- `SERVER_EPHEMERAL` mode because LibreOffice does not run directly in the browser.
+- One DOCX file with a maximum size of 50 MiB.
+- The browser creates a Go API job through a multipart upload.
+- DOCX is validated as an OOXML ZIP, including signature, entry structure, traversal, duplicates, encryption, macro-enabled content, compression ratio, and expanded size.
+- Progress and status are delivered through Server-Sent Events.
+- PDF output can be downloaded only once.
+- Output is checked again against the PDF signature and EOF marker before it becomes available for download.
+- Jobs can be cancelled and use timeout and TTL limits of up to 15 minutes by default.
+- Input is removed after the processor completes; output is cleaned up after download, cancellation, error, timeout, shutdown, or TTL expiry.
+- Fidelity follows the fonts and LibreOffice capabilities in the container, so output is not guaranteed to match Microsoft Word exactly.
 
-## Fondasi aplikasi web
+## Web application foundation
 
-- Astro 7 menghasilkan halaman statis untuk homepage, 404, sitemap, robots, dan setiap route tool.
-- React 19 digunakan untuk generic `ToolShell` interaktif.
-- Tailwind CSS 4 digunakan untuk baseline visual.
-- Empat route aktif:
+- Astro 7 produces static pages for the homepage, 404, sitemap, robots, and every tool route.
+- React 19 is used for the generic interactive `ToolShell`.
+- Tailwind CSS 4 provides the visual baseline.
+- Four active routes:
   - `/image/png-to-jpg`
   - `/pdf/merge-pdf`
   - `/video/video-to-gif`
   - `/document/docx-to-pdf`
-- Satu typed tool registry menjadi sumber metadata, route, limit, opsi, privacy mode, SEO, dan pemetaan processor.
-- Generic shell menyediakan drop zone, file queue, reorder, opsi, progress, cancel, retry, error state, dan result download.
-- Related tools, breadcrumb, title, description, canonical URL, dan structured metadata mengikuti registry.
-- Nama aplikasi dapat diganti melalui `PUBLIC_APP_NAME`.
-- UI saat ini mobile-first, memiliki skip link, focus state, label form, status announcement, dan navigasi keyboard dasar.
-- Struktur UI tetap dipisahkan dari processor sehingga edge state dan perubahan presentation dapat diterapkan tanpa menulis ulang engine konversi.
+- One typed tool registry is the source of metadata, routes, limits, options, privacy mode, SEO, and processor mapping.
+- The generic shell provides a drop zone, file queue, reordering, options, progress, cancellation, retry, error states, and result downloads.
+- Related tools, breadcrumbs, titles, descriptions, canonical URLs, and structured metadata follow the registry.
+- The application name can be changed through `PUBLIC_APP_NAME`.
+- The UI is mobile-first and includes a skip link, focus states, form labels, status announcements, and basic keyboard navigation.
+- The UI structure remains separate from processors so edge states and presentation changes can be applied without rewriting the conversion engine.
 
 ## Converter Workspace edge states
 
-Implementasi edge-state production untuk Converter Workspace selesai pada 29 Agustus 2026. Perubahan tetap menggunakan visual baseline tool-shell yang sudah ada dan tidak mendesain ulang happy path.
+The production edge-state implementation for the Converter Workspace was completed on August 29, 2026. The changes retain the existing ToolShell visual baseline and do not redesign the happy path.
 
-- **Unsupported File Type** menampilkan status `Unsupported file type`/`Unsupported format` dengan aksi menghapus atau mengganti file.
-- **File Too Large** menampilkan ukuran yang dipilih dan limit yang berlaku, termasuk aksi menghapus atau mengunggah file lebih kecil.
-- **Partial Success Batch** mempertahankan semua output yang berhasil, menyediakan bulk download untuk hasil sukses, dan aksi retry per file gagal.
-- **Cancelled State** mempertahankan file yang dipilih serta menyediakan `Start again` dan `Remove files`.
-- **Browser Not Supported** menyediakan arahan browser modern, pemilihan file lain, dan navigasi kembali ke katalog tool.
-- **Backend Unavailable** menggunakan pesan aman untuk tool server sementara, dengan aksi retry dan pemilihan file lain.
-- **Empty Result** menangani proses yang selesai tanpa output unduhan dengan aksi retry atau upload ulang.
-- **Mobile Sticky Action Bar** aktif hanya pada viewport mobile ketika file siap diproses atau hasil siap diunduh, memakai safe-area padding dan tambahan ruang bawah agar konten tidak tertutup.
+- **Unsupported File Type** shows `Unsupported file type`/`Unsupported format` with actions to remove or replace the file.
+- **File Too Large** shows the selected size and the applicable limit, with actions to remove the file or upload a smaller one.
+- **Partial Success Batch** retains every successful output, provides bulk download for successful results, and provides retry actions for each failed file.
+- **Cancelled State** retains selected files and provides `Start again` and `Remove files`.
+- **Browser Not Supported** gives modern-browser guidance, a way to select another file, and navigation back to the tool catalog.
+- **Backend Unavailable** uses a safe message for temporary server-tool failure, with retry and file-selection actions.
+- **Empty Result** handles processing that completes without downloadable output, with retry or re-upload actions.
+- **Mobile Sticky Action Bar** is active only on mobile viewports when files are ready to process or results are ready to download. It uses safe-area padding and extra bottom space so content is not obscured.
 
-State machine tool-shell sekarang membedakan fase `canceled`, `partial-success`, dan `empty`. Perubahan hanya menyentuh presentation/state orchestration di `packages/ui/src/tool-shell`; processor browser, backend/API, worker, route, CI, compliance, package manifest, dan lockfile tidak diubah.
+The ToolShell state machine now distinguishes the `canceled`, `partial-success`, and `empty` phases. The changes only touch presentation/state orchestration in `packages/ui/src/tool-shell`; browser processors, backend/API, workers, routes, CI, compliance, package manifests, and lockfiles are unchanged.
 
-Kontrak regresi berikut tetap dipertahankan:
+The following regression contracts remain intact:
 
-- Tombol proses tetap dapat diakses sebagai `getByRole("button", { name: "Process files" })`.
-- Elemen `#file-queue-heading + span` tetap menghasilkan `2 selected` untuk dua file.
-- PNG single download dan bulk ZIP tetap tersedia.
-- Reorder Merge PDF, flow DOCX to PDF, flow Video to GIF, dan output filename yang sudah ada tetap dipertahankan.
+- The process button remains accessible as `getByRole("button", { name: "Process files" })`.
+- `#file-queue-heading + span` continues to produce `2 selected` for two files.
+- PNG single-file download and bulk ZIP remain available.
+- Merge PDF reordering, the DOCX-to-PDF flow, the Video-to-GIF flow, and existing output filenames remain intact.
 
-## Arsitektur pemrosesan
+## Processing architecture
 
-### Jalur lokal
+### Local path
 
 ```text
 File picker/drop
-  -> validasi extension, MIME, magic bytes, size, dan options
-  -> dedicated Web Worker / worker ffmpeg.wasm
-  -> Blob output atau ZIP
+  -> extension, MIME, magic-byte, size, and option validation
+  -> dedicated Web Worker / ffmpeg.wasm worker
+  -> Blob output or ZIP
   -> object URL download
-  -> revoke URL dan terminate worker
+  -> revoke URL and terminate worker
 ```
 
-Tidak ada fallback diam-diam dari tool `LOCAL_ONLY` ke server.
+There is no silent fallback from a `LOCAL_ONLY` tool to the server.
 
-### Jalur server sementara
+### Ephemeral server path
 
 ```text
 Browser
   -> Go job API
-  -> random job directory di tmpfs
+  -> random job directory in tmpfs
   -> Unix socket
-  -> LibreOffice runner tanpa network
+  -> LibreOffice runner without network access
   -> one-time PDF download
-  -> cleanup seluruh job directory
+  -> cleanup of the entire job directory
 ```
 
-API menentukan pemetaan `toolId` ke processor. Client tidak dapat memilih executable atau command server.
+The API determines the `toolId`-to-processor mapping. The client cannot select an executable or server command.
 
-## Backend dan isolasi office
+## Backend and office isolation
 
-- API dan office runner ditulis dengan Go 1.24.
-- Upload diproses secara streaming dan dibatasi ukurannya.
-- Metadata job hanya disimpan di RAM.
-- Job ID dibuat acak dan output menggunakan download satu kali.
-- Lifecycle mendukung antrean, progress, success, failure, cancel, timeout, TTL, dan shutdown cleanup.
-- Queue memiliki batas jumlah job dan deadline absolut.
-- Cleanup yang gagal dicatat dan dicoba kembali oleh sweeper.
-- API menyediakan health endpoint dan metrics agregat tanpa filename atau isi file pengguna.
-- Komunikasi API ke office runner menggunakan Unix domain socket dengan token opsional.
-- Container office runner:
-  - berjalan sebagai non-root;
-  - menggunakan filesystem read-only;
-  - memakai tmpfs untuk scratch storage;
-  - memakai `network_mode: none`;
-  - menghapus seluruh Linux capabilities;
-  - mengaktifkan `no-new-privileges`;
-  - memiliki batas CPU, RAM, PID, dan waktu proses;
-  - tidak memublikasikan port.
-- Default hanya menjalankan satu job LibreOffice pada satu waktu per runner.
+- The API and office runner are written in Go 1.24.
+- Uploads are streamed and size-limited.
+- Job metadata is stored only in RAM.
+- Job IDs are random and output uses one-time download.
+- The lifecycle supports queuing, progress, success, failure, cancellation, timeout, TTL, and shutdown cleanup.
+- The queue has a job-count limit and an absolute deadline.
+- Failed cleanup is recorded and retried by the sweeper.
+- The API provides a health endpoint and aggregate metrics without user filenames or file contents.
+- API-to-office-runner communication uses a Unix domain socket with an optional token.
+- The office-runner container:
+  - runs as non-root;
+  - uses a read-only filesystem;
+  - uses tmpfs for scratch storage;
+  - uses `network_mode: none`;
+  - drops all Linux capabilities;
+  - enables `no-new-privileges`;
+  - has CPU, RAM, PID, and processing-time limits;
+  - does not publish a port.
+- By default, each runner processes only one LibreOffice job at a time.
 
-## Keamanan dan privasi
+## Security and privacy
 
-- Browser tool dan server tool memiliki privacy badge yang berbeda.
-- Binary dari tool lokal tidak masuk request `/v1/jobs`.
-- File server tidak disimpan ke database, object storage, CDN cache, atau persistent volume.
-- Nama file asli hanya dipakai sesaat untuk validasi dan tidak disimpan sebagai metadata job.
-- Response API menggunakan `Cache-Control: private, no-store`.
-- CORS hanya menerima origin frontend yang dikonfigurasi; wildcard ditolak.
-- Error internal dipetakan menjadi pesan aman untuk pengguna.
-- CSP dibuat pada build time dan memasukkan origin API yang dikonfigurasi.
-- Header frontend mencakup baseline security headers serta COOP/COEP/CORP untuk kebutuhan worker dan WebAssembly.
-- Service worker tidak digunakan untuk request maupun response file pengguna.
-- Tidak ditemukan credential yang terbuka pada audit source sederhana; hanya template `.env.example` yang disimpan.
+- Browser tools and server tools have distinct privacy badges.
+- Binaries from local tools never enter a `/v1/jobs` request.
+- Server files are not stored in a database, object storage, CDN cache, or persistent volume.
+- Original filenames are used only briefly for validation and are not stored as metadata.
+- API responses use `Cache-Control: private, no-store`.
+- CORS accepts only configured frontend origins; wildcards are rejected.
+- Internal errors are mapped to safe user messages.
+- CSP is generated at build time and includes the configured API origin.
+- Frontend headers include baseline security headers plus COOP/COEP/CORP for workers and WebAssembly.
+- No service worker is used for user-file requests or responses.
+- A basic source audit found no exposed credentials; only the `.env.example` template is stored.
 
-## Struktur repository
+## Repository structure
 
 ```text
 apps/
-  web/                 Astro frontend, React island, workers, dan E2E
-  api/                 Go API, office runner, Dockerfile, dan integration test
+  web/                 Astro frontend, React islands, workers, and E2E
+  api/                 Go API, office runner, Dockerfile, and integration tests
 packages/
-  tool-core/           Kontrak tool, options, file validation, dan safe errors
-  tool-registry/       Definisi tool, preset, manifest, dan registry validation
-  browser-processors/  Image, PDF, FFmpeg, worker lifecycle, dan ZIP
-  server-contracts/    Job API client, types, dan SSE parser
-  ui/                  Generic ToolShell dan state machine
-  shared/              Helper binary, MIME, bytes, dan filename
+  tool-core/           Tool contracts, options, file validation, and safe errors
+  tool-registry/       Tool definitions, presets, manifests, and registry validation
+  browser-processors/  Image, PDF, FFmpeg, worker lifecycle, and ZIP processing
+  server-contracts/    Job API client, types, and SSE parser
+  ui/                  Generic ToolShell and state machine
+  shared/              Binary, MIME, byte, and filename helpers
 docs/
   architecture.md
   development.md
   deployment.md
 ```
 
-## Developer experience dan dokumentasi
+## Developer experience and documentation
 
-- Root scripts tersedia untuk dev, lint, typecheck, test, build, E2E, preview, format, dan compliance.
-- Dependency JavaScript dikunci dengan `pnpm-lock.yaml`.
-- `.env.example` mendokumentasikan URL, origin, limit, timeout, socket, dan concurrency.
-- File `LICENSE` ditambahkan untuk GNU GPLv3.
-- `TRADEMARKS.md` dibuat untuk melindungi identitas visual proyek.
-- `THIRD_PARTY_NOTICES.md` diperbarui dengan versi persis dari `pnpm-lock.yaml`.
-- `docs/compliance/ffmpeg.md` dibuat untuk mendokumentasikan status provenance WASM.
-- `scripts/compliance.mjs` dibuat dan `pnpm compliance` tersedia sebagai pengawal build.
-- `README.md` sudah diubah dari implementation contract menjadi halaman proyek GitHub.
-- `.gitignore` sekarang mengecualikan dependency, env lokal, cache, build output, test report, generated FFmpeg assets, Go binary, log, dan file editor/OS.
-- Dokumentasi terpisah tersedia untuk arsitektur, development, deployment, compatibility, dan third-party licenses.
-- Repository Git sudah memakai branch `main` dan terhubung ke remote GitHub `origin`.
-- GitHub Actions CI sudah ditambahkan; menjalankan format, lint, typecheck, test, build, E2E (Playwright 3 browser), dan audit lisensi secara terpisah.
+- Root scripts are available for dev, lint, typecheck, test, build, E2E, preview, formatting, and compliance.
+- JavaScript dependencies are locked in `pnpm-lock.yaml`.
+- `.env.example` documents URLs, origins, limits, timeouts, sockets, and concurrency.
+- The `LICENSE` file was added for GNU GPLv3.
+- `TRADEMARKS.md` was created to protect the project's visual identity.
+- `THIRD_PARTY_NOTICES.md` was updated with the exact versions resolved by `pnpm-lock.yaml`.
+- `docs/compliance/ffmpeg.md` was created to document the WASM provenance status.
+- `scripts/compliance.mjs` was created and `pnpm compliance` is available as a build guard.
+- `README.md` was changed from an implementation contract into a GitHub project page.
+- `.gitignore` now excludes dependencies, local environment files, caches, build output, test reports, generated FFmpeg assets, Go binaries, logs, and editor/OS files.
+- Separate documentation is available for architecture, development, deployment, compatibility, and third-party licenses.
+- The Git repository uses the `main` branch and is connected to the GitHub remote `origin`.
+- GitHub Actions CI has been added; it runs format, lint, typecheck, test, build, E2E across three Playwright browsers, and license auditing separately.
 
-## Hasil verifikasi terakhir
+## Latest verification results
 
-| Gate                           | Hasil terakhir                                                  |
-| ------------------------------ | --------------------------------------------------------------- |
-| `pnpm format` / `format:check` | Lulus                                                           |
-| `pnpm lint`                    | Lulus                                                           |
-| `go -C apps/api vet ./...`     | Lulus                                                           |
-| `pnpm typecheck`               | Lulus, 0 error                                                  |
-| `pnpm test`                    | Lulus                                                           |
-| `go -C apps/api test ./...`    | Lulus                                                           |
-| `pnpm build`                   | Lulus                                                           |
-| Tool-shell reducer             | 8 test lulus                                                    |
-| Workspace regression E2E       | 36 lulus, 4 dilewati sesuai flag heavy-media                    |
-| `pnpm compliance`              | Sengaja digagalkan (blocked pending evidence provenance FFmpeg) |
-| Release Compliance Audit       | Blocker dikenal menjadi warning; error lain tetap hard-fail     |
-| Playwright + API Compose       | 41 lulus, 3 dilewati secara sengaja (total 44 test)             |
-| Matriks lifecycle container    | Success, cancel, timeout, disconnect, restart lulus             |
+| Gate                           | Latest result                                                            |
+| ------------------------------ | ------------------------------------------------------------------------ |
+| `pnpm format` / `format:check` | Passed                                                                   |
+| `pnpm lint`                    | Passed                                                                   |
+| `go -C apps/api vet ./...`     | Passed                                                                   |
+| `pnpm typecheck`               | Passed, 0 errors                                                         |
+| `pnpm test`                    | Passed                                                                   |
+| `go -C apps/api test ./...`    | Passed                                                                   |
+| `pnpm build`                   | Passed                                                                   |
+| ToolShell reducer              | 8 tests passed                                                           |
+| Workspace regression E2E       | 36 passed, 4 skipped according to the heavy-media flag                   |
+| `pnpm compliance`              | Intentionally fails (blocked pending FFmpeg provenance evidence)         |
+| Release Compliance Audit       | The known blocker is a warning; every other error remains a hard failure |
+| Playwright + API Compose       | 41 passed, 3 intentionally skipped (44 tests total)                      |
+| Container lifecycle matrix     | Success, cancellation, timeout, disconnect, and restart passed           |
 
-Playwright penuh telah memeriksa route desktop/mobile, flow tool lokal, fallback HTMLCanvasElement, pemrosesan FFmpeg aktual, dan DOCX melalui API Compose di 3 browser (Chromium, Firefox, WebKit). Hasil akhirnya 41 test lulus dan 3 test dilewati secara sengaja (smoke FFmpeg hanya di Chromium desktop).
+The full Playwright suite checked desktop/mobile routes, local-tool flows, the `HTMLCanvasElement` fallback, actual FFmpeg processing, and DOCX through API Compose in three browsers: Chromium, Firefox, and WebKit. The final result was 41 tests passed and 3 intentionally skipped (the FFmpeg smoke test runs only in Chromium desktop).
 
-Regresi terbaru untuk Converter Workspace dijalankan pada Chromium, Firefox, WebKit, dan mobile Chromium menggunakan `PLAYWRIGHT_SKIP_API_SERVER=1` serta `PLAYWRIGHT_SKIP_HEAVY_MEDIA=1`. Sebanyak 36 test lulus dan 4 test Video to GIF dilewati sesuai flag. Suite dijalankan dari workspace root agar konfigurasi `playwright.config.ts` di root digunakan. PNG batch ZIP, individual download, fallback canvas, Merge PDF reorder, route, metadata, responsive layout, dan kontrak mobile tetap lulus.
+The latest Converter Workspace regressions ran in Chromium, Firefox, WebKit, and mobile Chromium with `PLAYWRIGHT_SKIP_API_SERVER=1` and `PLAYWRIGHT_SKIP_HEAVY_MEDIA=1`. Thirty-six tests passed and four Video-to-GIF tests were skipped according to the flag. The suite ran from the workspace root so the root `playwright.config.ts` was used. PNG batch ZIP, individual download, canvas fallback, Merge PDF reordering, routes, metadata, responsive layout, and mobile contracts all remained passing.
 
-Classifier Release Compliance Audit diperketat pada 29 Agustus 2026. CI sekarang hanya menerima satu baris blocker provenance FFmpeg yang persis dikenal sebagai warning; setiap `[COMPLIANCE ERROR]` lain tetap menggagalkan job. Regresi classifier memastikan output saat ini masuk jalur blocker yang dikenal, sedangkan simulasi `--enable-nonfree` tetap masuk jalur real failure.
+The Release Compliance Audit classifier was tightened on August 29, 2026. CI now accepts only the one exact known FFmpeg provenance blocker line as a warning; every other `[COMPLIANCE ERROR]` still fails the job. Classifier regression tests confirm that current output follows the known-blocker path, while an `--enable-nonfree` simulation still follows the real-failure path.
 
-## Audit lintas-browser 26 Agustus 2026
+## Cross-browser audit, August 26, 2026
 
-Audit browser-only tambahan dijalankan terhadap build terbaru menggunakan Playwright 1.62.1 dengan Firefox 153.0 dan WebKit 26.5 di Windows. Audit ini melengkapi E2E Chromium yang sudah ada, tetapi tidak menggantikan validasi akhir pada Firefox branded dan Safari asli di macOS/iOS.
+An additional browser-only audit ran against the latest build using Playwright 1.62.1 with Firefox 153.0 and WebKit 26.5 on Windows. It complements existing Chromium E2E but does not replace final validation in branded Firefox and real Safari on macOS/iOS.
 
-### Cakupan yang diuji
+### Scope tested
 
-- Lima route (`/`, PNG to JPG, Merge PDF, Video to GIF, dan DOCX to PDF) diperiksa pada viewport desktop 1280 x 720 dan viewport sempit 390 x 844.
-- Layout responsif, horizontal overflow, katalog, metadata, canonical URL, privacy badge, hydration React, dan tampilan form diperiksa di Firefox dan WebKit.
-- Navigasi keyboard dan perilaku skip link diuji sampai aktivasi `#main-content`.
-- PNG to JPG diuji dengan dua PNG sintetis, transparency background, quality, dua download JPG, dan ZIP valid.
-- Merge PDF diuji dengan dua PDF sintetis, reorder, urutan tiga halaman hasil, dan download PDF valid.
-- Video to GIF diuji dengan WebM statis, opsi durasi/FPS/lebar, hasil GIF valid, dan download.
-- UI DOCX to PDF berhasil dimuat pada kedua engine. Konversi DOCX lintas-browser tidak dijalankan pada sesi ini karena Docker/API tidak aktif.
-- Dua puluh screenshot baseline dibuat untuk lima route pada dua viewport dan dua engine. Tidak ditemukan overflow atau kerusakan layout pada state awal.
+- Five routes (`/`, PNG to JPG, Merge PDF, Video to GIF, and DOCX to PDF) were checked at a 1280 x 720 desktop viewport and a 390 x 844 narrow viewport.
+- Responsive layout, horizontal overflow, catalog, metadata, canonical URLs, privacy badges, React hydration, and form rendering were checked in Firefox and WebKit.
+- Keyboard navigation and skip-link behavior were tested through activation of `#main-content`.
+- PNG to JPG was tested with two synthetic PNGs, transparency background, quality, two JPG downloads, and a valid ZIP.
+- Merge PDF was tested with two synthetic PDFs, reordering, three-page output order, and a valid PDF download.
+- Video to GIF was tested with static WebM, duration/FPS/width options, valid GIF output, and download.
+- The DOCX-to-PDF UI loaded successfully in both engines. Cross-browser DOCX conversion was not run in this session because Docker/API was inactive.
+- Twenty baseline screenshots were made for five routes at two viewports and two engines. No overflow or layout breakage was found in the initial state.
 
-### Hasil per browser
+### Results by browser
 
-| Alur                        | Firefox 153.0                                         | WebKit 26.5 di Windows                                                                         |
-| --------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Route, metadata, dan layout | Lulus                                                 | Lulus                                                                                          |
-| Skip link                   | Lulus dengan `Tab` dan `Enter`                        | Aktivasi dan target lulus; urutan `Tab` mengikuti preferensi `tabsToLinks` WebKit/Safari       |
-| PNG to JPG dan ZIP          | Lulus                                                 | Lulus menggunakan fallback HTMLCanvasElement di main-thread (`OffscreenCanvas` tidak tersedia) |
-| Merge PDF dan download      | Lulus                                                 | Lulus                                                                                          |
-| Video to GIF                | Lulus setelah intersepsi IDM pada asset WASM dilewati | Lulus dengan fixture WebM statis                                                               |
-| DOCX to PDF                 | UI lulus; konversi tidak dijalankan                   | UI lulus; konversi tidak dijalankan                                                            |
+| Flow                         | Firefox 153.0                                             | WebKit 26.5 on Windows                                                                       |
+| ---------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Routes, metadata, and layout | Passed                                                    | Passed                                                                                       |
+| Skip link                    | Passed with `Tab` and `Enter`                             | Activation and target passed; `Tab` order follows WebKit/Safari `tabsToLinks` preferences    |
+| PNG to JPG and ZIP           | Passed                                                    | Passed using the main-thread `HTMLCanvasElement` fallback (`OffscreenCanvas` is unavailable) |
+| Merge PDF and download       | Passed                                                    | Passed                                                                                       |
+| Video to GIF                 | Passed after bypassing IDM interception of the WASM asset | Passed with a static WebM fixture                                                            |
+| DOCX to PDF                  | UI passed; conversion not run                             | UI passed; conversion not run                                                                |
 
-### Diagnosis dan perbaikan metode verifikasi
+### Diagnosis and verification-method improvements
 
-- Fixture E2E Video to GIF yang membuat WebM melalui `MediaRecorder` tidak kompatibel dengan WebKit/Firefox. Test diskip secara gracefully untuk browser non-Chromium pada fixture sintetis.
-- Fallback WebKit menggunakan main-thread canvas telah lulus uji fungsional: dapat menangani banyak file, mempertahankan transaparansi dan konversi ZIP tanpa mengirim data ke server.
-- Playwright E2E telah diperluas untuk menjalankan Firefox dan WebKit pada setiap commit CI.
+- The Video-to-GIF E2E fixture that creates WebM through `MediaRecorder` is incompatible with WebKit and Firefox. The test is skipped gracefully for non-Chromium browsers when using the synthetic fixture.
+- The WebKit fallback using main-thread canvas passed functional tests: it can process multiple files, preserve transparency, and create ZIP output without sending data to the server.
+- Playwright E2E was expanded to run Firefox and WebKit on every CI commit.
 
-### Perbaikan production yang masih diperlukan
+### Historical follow-up from this audit
 
-- Tolak respons FFmpeg 204/zero-byte dengan pesan yang tepat dan pertimbangkan nama asset terkompresi berekstensi netral agar tidak diintersepsi download manager.
+- At the time of this audit, the recommended follow-up was to reject FFmpeg 204/zero-byte responses with an appropriate message and consider a compressed asset name with a neutral extension to avoid download-manager interception.
 
-## Hasil validasi P0 backend nyata
+## Real P0 backend validation results
 
-- Success menghasilkan PDF valid 15.142 byte; setelah one-time download, kedua root job kosong.
-- Cancel dilakukan saat status job benar-benar `running`; DELETE merespons 204 dan kedua root job kosong.
-- Timeout dipicu dari office runner nyata dengan batas 1 ms; API melaporkan `timed_out` dengan kode `process_timeout`, lalu konfigurasi default dipulihkan.
-- Disconnect diuji pada output PDF 1.400.949 byte; client diputus setelah menerima 3.756 byte dan cleanup tetap menyelesaikan kedua root job.
-- Restart API dilakukan ketika job masih `running`; setelah health pulih, ID lama merespons 404 dan kedua root job kosong.
-- `/work/jobs` dan `/work/office-jobs` diverifikasi kembali kosong setelah setiap skenario. Socket `/run/aio-office/office.sock` tetap tersedia sebagaimana mestinya.
-- Full Playwright suite dengan API container aktif selesai dalam 24 detik: 18 lulus dan 2 skip yang disengaja.
+- Success produced a valid 15,142-byte PDF; after one-time download, both job roots were empty.
+- Cancellation occurred while the job status was truly `running`; DELETE returned 204 and both job roots were empty.
+- Timeout was triggered from the real office runner with a 1 ms limit; the API reported `timed_out` with the `process_timeout` code, then the default configuration was restored.
+- Disconnect was tested with a 1,400,949-byte PDF output; the client disconnected after receiving 3,756 bytes and cleanup still completed in both roots.
+- The API restarted while a job was still `running`; after health recovered, the old ID returned 404 and both job roots were empty.
+- `/work/jobs` and `/work/office-jobs` were verified empty again after every scenario. The `/run/aio-office/office.sock` socket remained available as expected.
+- The full Playwright suite with the API container active completed in 24 seconds: 18 passed and 2 intentional skips.
 
-Validasi ini juga menemukan dan memperbaiki race hydration pada upload E2E, kompatibilitas gzip FFmpeg pada Vite development server, import core FFmpeg dari public directory, serta flake assertion TTL yang mendahului cleanup asynchronous.
+This validation also found and fixed the upload E2E hydration race, FFmpeg gzip compatibility in the Vite development server, FFmpeg core import from the public directory, and a flaky TTL assertion that ran before asynchronous cleanup.
 
-## Status runtime saat snapshot
+## Runtime status at the snapshot
 
-- Frontend development berjalan di <http://localhost:4321>.
-- Homepage, route DOCX to PDF, dan API `/healthz` merespons HTTP 200.
-- Docker Desktop 29.7.2 sudah terpasang pada instalasi per-user.
-- WSL dan Docker Linux engine sudah aktif; server Docker melaporkan versi 29.7.2.
-- Image `api` dan `office-runner` berhasil dibangun melalui Compose.
-- Container API dan office runner berjalan dengan status `healthy`.
-- DOCX sintetis berhasil dikonversi end-to-end menjadi PDF valid melalui ketiga endpoint job (`POST`, SSE, dan output).
+- The development frontend runs at <http://localhost:4321>.
+- The homepage, DOCX-to-PDF route, and API `/healthz` respond with HTTP 200.
+- Docker Desktop 29.7.2 is installed for the per-user installation.
+- WSL and the Docker Linux engine are active; the Docker server reports version 29.7.2.
+- The `api` and `office-runner` images built successfully through Compose.
+- The API and office-runner containers are running and healthy.
+- A synthetic DOCX was converted end-to-end into a valid PDF through all three job endpoints: `POST`, SSE, and output.
 
-## Yang belum selesai
+## Open items at this snapshot
 
-1. Review visual final untuk area aplikasi di luar Converter Workspace.
-2. Provenance/source tree dari `@ffmpeg/core` belum terselesaikan (blocked pending evidence).
+1. Final visual review for application areas outside the Converter Workspace.
+2. The provenance/source tree for `@ffmpeg/core` remains unresolved (blocked pending evidence).
 
-## Prioritas berikutnya
+## Next priorities
 
-### P0 — Validasi backend nyata (selesai)
+### P0 - Real backend validation (complete)
 
-- Matriks success, cancel, timeout, download disconnect, restart, dan cleanup sudah lulus pada Compose nyata.
-- Kedua direktori job kembali kosong setelah setiap skenario gagal maupun berhasil.
-- Seluruh Playwright suite sudah lulus dengan API container aktif: 18 lulus, 2 skip disengaja.
+- The success, cancellation, timeout, download-disconnect, restart, and cleanup matrix passed in real Compose.
+- Both job directories returned empty after every failed and successful scenario.
+- The full Playwright suite passed with the API container active: 18 passed and 2 intentional skips.
 
-### P0 — Release compliance
+### P0 - Release compliance
 
-- Adopsi lisensi: **selesai** (GPL-3.0-or-later).
-- Compliance guardrail: **selesai** (`pnpm compliance`).
-- Exact corresponding source/provenance FFmpeg: **blocked pending evidence**.
-- Tindakan berikutnya: kompilasi WASM FFmpeg secara lokal dari source tree terverifikasi, atau ganti dengan custom build LGPL-only yang telah direview.
+- License adoption: **complete** (GPL-3.0-or-later).
+- Compliance guardrail: **complete** (`pnpm compliance`).
+- Exact FFmpeg corresponding source/provenance: **blocked pending evidence**.
+- Next action: compile FFmpeg WASM locally from a verified source tree, or replace it with a reviewed custom LGPL-only build.
 
-### P1 — Design pass Converter Workspace (selesai)
+### P1 - Converter Workspace design pass (complete)
 
-- Main Converter Workspace tetap menjadi visual baseline; happy path tidak didesain ulang pada edge-state pass.
-- Unsupported, oversized, partial success, cancelled, browser unsupported, backend unavailable, empty result, dan mobile sticky action bar sudah diterapkan.
-- Kontrak `ToolShell`, processor, nama file output, mobile layout, keyboard, focus, dan announcement tetap dipertahankan.
+- The main Converter Workspace remains the visual baseline; the happy path was not redesigned during the edge-state pass.
+- Unsupported, oversized, partial-success, cancelled, browser-unsupported, backend-unavailable, empty-result, and mobile sticky-action-bar states have been implemented.
+- ToolShell contracts, processors, output filenames, mobile layout, keyboard behavior, focus, and announcements remain intact.
 
-### P1 — Release confidence (selesai)
+### P1 - Release confidence (complete)
 
-- CI GitHub otomatis mengeksekusi format, lint, typecheck, build, dan browser-only E2E (Chromium/Firefox/WebKit).
-- Fallback PNG WebKit diimplementasikan dan fully tested E2E lintas browser.
+- GitHub CI automatically runs format, lint, typecheck, build, and browser-only E2E in Chromium, Firefox, and WebKit.
+- The WebKit PNG fallback is implemented and fully tested by cross-browser E2E.
 
 ## Release compliance status
 
 - **Source license**: GPL-3.0-or-later
-- **Trademark/brand assets**: Reserved (dilindungi melalui TRADEMARKS.md)
-- **Third-party notices**: Updated (menggunakan versi resolusi presisi dari lockfile)
+- **Trademark/brand assets**: Reserved (protected through `TRADEMARKS.md`)
+- **Third-party notices**: Updated (using the exact versions resolved by the lockfile)
 - **FFmpeg configure status**: `--enable-gpl` found, `--enable-nonfree` not found
 - **FFmpeg provenance**: Blocked pending evidence
-- **Public repo**: OK (Source dapat dipublikasikan)
-- **Production/tagged release**: Blocked (Dibutuhkan bukti provenance FFmpeg WASM sebelum distribusi publik berjalan penuh)
+- **Public repo**: OK (source may be published)
+- **Production/tagged release**: Blocked (FFmpeg WASM provenance evidence is required before full public distribution)
 
-## Perintah penting
+## Important commands
 
 ```bash
 pnpm dev
@@ -344,10 +365,10 @@ pnpm format:check
 pnpm compliance
 ```
 
-Dokumentasi lanjutan:
+Further documentation:
 
 - [README](README.md)
-- [Arsitektur](docs/architecture.md)
+- [Architecture](docs/architecture.md)
 - [Development](docs/development.md)
 - [Deployment](docs/deployment.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
