@@ -1,8 +1,44 @@
 # AIO Converter - Implementation Update
 
-> Progress snapshot: August 30, 2026
+> Progress snapshot: August 31, 2026
 
 This document summarizes the implementation that is actually available in the repository. It is not an ideas list from an earlier brief and does not treat untested features as complete.
+
+## 2026-08-31 - Cloudflare Workers Static Assets staging deployment
+
+The Astro frontend was deployed successfully as a Cloudflare Workers Static Assets staging/demo site:
+
+- Frontend URL: `https://aio-tools-converter.id-khalid94.workers.dev`
+- Backend API URL: `https://api.atv-market.com`
+- The Workers build environment now provides `PUBLIC_APP_URL` and `PUBLIC_API_URL` at Astro build time. These build variables remain separate from Worker runtime variables.
+- The root `wrangler.jsonc` is valid, formatted JSONC and publishes `apps/web/dist` as the static asset directory.
+- Wrangler is invoked with `--config ./wrangler.jsonc`, which targets the frontend configuration explicitly instead of running application detection against the pnpm workspace root.
+- Production and non-production deployments use separate commands: `wrangler deploy` activates a version, while `wrangler versions upload` creates a preview version without replacing the active deployment.
+- The initial `Hello World` response was confirmed to come from the previously active Worker version rather than the generated Astro output. Activating the current static-assets version resolved it.
+- The Docker API CORS allowlist now includes both `http://localhost:4321` and the exact deployed Workers origin. Wildcard CORS was not enabled.
+- The API container was recreated so the updated `API_ALLOWED_ORIGINS` value was loaded.
+- Browser requests from the deployed frontend can reach the local Docker API and LibreOffice office runner through the existing Cloudflare Tunnel.
+- Local environment values remain in the ignored `.env` file; no tunnel token, API token, or other secret was committed.
+
+Workers Builds uses the following repository-root commands:
+
+```text
+Build:      pnpm --filter @aio-converter/web build
+Production: npx wrangler deploy --config ./wrangler.jsonc
+Preview:    npx wrangler versions upload --config ./wrangler.jsonc
+```
+
+The deployed request path is now:
+
+```text
+Cloudflare Workers static frontend
+  -> https://api.atv-market.com
+  -> Cloudflare Tunnel
+  -> local Docker Go API
+  -> LibreOffice office runner
+```
+
+This is a staging/demo deployment for preview and portfolio use. It does not change the release boundary: FFmpeg WASM provenance remains blocked pending evidence, and a production/tagged release must wait until that issue is resolved.
 
 ## 2026-08-30 - Local Docker API via Cloudflare Tunnel
 
@@ -38,6 +74,7 @@ POST /v1/jobs/document.docx-to-pdf
 | GitHub documentation   | Complete                   | Public README, technical documentation, third-party notices, and `.gitignore` have been polished                  |
 | License and compliance | Temporarily blocked        | GPL-3.0-or-later adopted; license and compliance files are present; FFmpeg provenance is blocked pending evidence |
 | GitHub repository      | Connected with active CI   | The `main` branch follows `origin/main`; GitHub Actions CI runs quality gates and E2E                             |
+| Staging deployment     | Operational                | Static frontend on Cloudflare Workers; local Docker API and office runner exposed through Cloudflare Tunnel       |
 | Production readiness   | Not yet                    | The Converter Workspace is complete; release still awaits FFmpeg WASM provenance                                  |
 
 ## Implemented features
@@ -303,6 +340,8 @@ This validation also found and fixed the upload E2E hydration race, FFmpeg gzip 
 ## Runtime status at the snapshot
 
 - The development frontend runs at <http://localhost:4321>.
+- The staging/demo frontend is active at <https://aio-tools-converter.id-khalid94.workers.dev>.
+- The public staging API is reachable through Cloudflare Tunnel at <https://api.atv-market.com>.
 - The homepage, DOCX-to-PDF route, and API `/healthz` respond with HTTP 200.
 - Docker Desktop 29.7.2 is installed for the per-user installation.
 - WSL and the Docker Linux engine are active; the Docker server reports version 29.7.2.
@@ -312,8 +351,7 @@ This validation also found and fixed the upload E2E hydration race, FFmpeg gzip 
 
 ## Open items at this snapshot
 
-1. Final visual review for application areas outside the Converter Workspace.
-2. The provenance/source tree for `@ffmpeg/core` remains unresolved (blocked pending evidence).
+1. The provenance/source tree for `@ffmpeg/core` remains unresolved (blocked pending evidence).
 
 ## Next priorities
 
