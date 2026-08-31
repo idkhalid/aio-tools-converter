@@ -1,3 +1,8 @@
-name = "aio-tools-converter"
-pages_build_output_dir = "apps/web/dist"
-compatibility_date = "2026-08-31"
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "aio-tools-converter",
+  "compatibility_date": "2026-08-31",
+  "assets": {
+    "directory": "apps/web/dist"
+  }
+}
