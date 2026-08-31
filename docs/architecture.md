@@ -1,58 +1,113 @@
-# Arsitektur Phase 1
+# Phase 1 architecture
 
-AIO Converter memakai satu registry typed dan satu shell halaman untuk semua tool. UI tidak mengimpor library konversi secara langsung; UI hanya berbicara dengan kontrak `JobExecutor` dan menerima `ProcessOutput` yang konsisten.
+AIO Converter is registry-driven. Every tool is described by the same typed tool registry and rendered through the same Converter Workspace. The `ToolShell` UI state machine does not import conversion libraries directly; it receives a `JobExecutor` and consumes a consistent set of `ProcessOutput` objects. The `apps/web` composition layer selects the correct browser or server executor from the registered execution mode and processor ID.
 
-## Batas modul
+Phase 1 intentionally supports two execution modes:
 
-| Modul                         | Tanggung jawab                                                                       |
-| ----------------------------- | ------------------------------------------------------------------------------------ |
-| `packages/tool-core`          | Kontrak tool/processor, validasi file dan option, serta error aman untuk pengguna    |
-| `packages/tool-registry`      | Sumber route, metadata, privacy mode, limit, option, dan pemetaan processor          |
-| `packages/browser-processors` | Implementasi image, PDF, FFmpeg, worker lifecycle, dan ZIP                           |
-| `packages/shared`             | Helper binary, MIME, dan nama output tanpa ketergantungan pada UI                    |
-| `apps/web`                    | Astro static routes, React `ToolShell`, aksesibilitas, dan client job API            |
-| `apps/api`                    | Upload streaming, lifecycle job sementara, SSE, cancel, one-time output, dan cleanup |
-| `office-runner`               | LibreOffice di container terpisah dengan scratch storage sementara                   |
+- `LOCAL_ONLY` keeps user files in the browser and has no API fallback.
+- `SERVER_EPHEMERAL` sends a file to a short-lived server job when conversion requires a native application.
 
-## Jalur local-only
+`REMOTE_FETCH` exists in the shared type model but is not part of Phase 1.
+
+## Module boundaries
+
+| Module or runtime boundary                | Responsibility                                                                                                |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `packages/tool-core`                      | Shared tool and processor contracts, file and option validation, execution modes, and user-safe errors.       |
+| `packages/tool-registry`                  | Source of truth for routes, metadata, privacy modes, limits, options, processor IDs, presets, and validation. |
+| `packages/browser-processors`             | Image, PDF, FFmpeg, archive, worker protocol, worker lifecycle, and browser executor implementations.         |
+| `packages/server-contracts`               | Typed server-job responses, SSE parsing, cancellation, cleanup requests, and the server `JobExecutor`.        |
+| `packages/shared`                         | UI-independent byte, MIME-type, file-extension, and output-filename helpers.                                  |
+| `packages/ui`                             | Converter Workspace components, accessibility behavior, edge states, and the `ToolShell` state machine.       |
+| `apps/web`                                | Astro static routes, React composition, executor selection, browser-worker entry points, metadata, and CSP.   |
+| `apps/api` — API binary                   | Streaming uploads, in-memory job lifecycle, queueing, SSE, cancellation, one-time output, and cleanup.        |
+| `apps/api` — office-worker binary         | LibreOffice conversion behind a Unix socket, with isolated temporary storage and process control.             |
+| Docker Compose `office-runner` service    | Runs the office-worker and LibreOffice without a network interface and with constrained container privileges. |
+| Cloudflare Workers Static Assets / Tunnel | Serves the static staging frontend and forwards the staging API hostname to the loopback-only Docker API.     |
+
+## Phase 1 execution map
+
+| Tool         | Registry mode      | Processor ID          | Runtime boundary                                  |
+| ------------ | ------------------ | --------------------- | ------------------------------------------------- |
+| PNG to JPG   | `LOCAL_ONLY`       | `image-convert`       | Browser worker or browser main-thread fallback    |
+| Merge PDF    | `LOCAL_ONLY`       | `pdf-merge`           | Browser worker                                    |
+| Video to GIF | `LOCAL_ONLY`       | `ffmpeg-video-to-gif` | Browser worker with the local FFmpeg WASM runtime |
+| DOCX to PDF  | `SERVER_EPHEMERAL` | `office-docx-to-pdf`  | Go API and isolated LibreOffice office runner     |
+
+The PNG-to-JPG executor can fall back to a main-thread browser implementation when the required `OffscreenCanvas` API is unavailable. This remains browser-local and never becomes a server fallback.
+
+## Browser-local path
 
 ```text
-File picker/drop
-  -> extension + declared MIME + magic-byte validation
+File picker or drop zone
+  -> extension, declared MIME type, and magic-byte validation
   -> option validation
-  -> dedicated Web Worker / worker milik ffmpeg.wasm
-  -> Blob output
-  -> object URL / ZIP download
-  -> revoke URL + terminate worker + cleanup
+  -> dedicated Web Worker, or the documented image-only browser fallback
+  -> ProcessOutput Blob
+  -> object URL or ZIP download
+  -> revoke object URL, terminate worker, and release resources
 ```
 
-Tidak ada fallback ke API untuk tool `LOCAL_ONLY`. Kegagalan codec, browser yang tidak mendukung, cancel, atau timeout berakhir sebagai error lokal yang aman.
+PNG-to-JPG batch output is archived through a separate browser worker. Merge PDF preserves the queue order selected by the user. Video to GIF loads the local FFmpeg WASM runtime inside the browser processing boundary.
 
-## Jalur server-ephemeral
+There is no API fallback for a `LOCAL_ONLY` tool. Unsupported browser capabilities, codec failures, cancellation, and timeouts terminate locally and are mapped to user-safe errors.
+
+## Server-ephemeral path
 
 ```text
 Browser
-  -> POST multipart ke API
-  -> job directory acak di tmpfs
-  -> Unix socket
-  -> office-runner tanpa network
-  -> LibreOffice subprocess di process group
-  -> PDF kembali ke API
-  -> one-time streaming download
-  -> hapus input/output dan seluruh job directory
+  -> multipart POST to the Go API
+  -> random API job directory in tmpfs
+  -> queued in-memory job with an absolute deadline
+  -> HTTP over a shared Unix socket
+  -> network-disabled office-runner container
+  -> temporary office-runner job directory in tmpfs
+  -> LibreOffice subprocess in its own process group
+  -> validated PDF streamed back to the API
+  -> SSE terminal status and one-time output download
+  -> remove input, output, and both temporary job directories
 ```
 
-API menentukan pemetaan `toolId -> processor`; client tidak pernah dapat memilih binary atau processor. Metadata job hanya berada di RAM. Input dihapus setelah processor selesai, sedangkan output dihapus setelah download pertama, cancel, error, timeout, shutdown, atau TTL paling lama 15 menit. Job antrean juga memiliki deadline absolut; cleanup filesystem yang gagal tetap dilacak dan dicoba ulang oleh sweeper.
+The API owns the `toolId -> processor` mapping; the client cannot select a binary or arbitrary processor. Job metadata exists only in memory. The API removes the input after processing. It removes the output after its first download, cancellation, failure, timeout, shutdown, or the configured TTL, whose accepted maximum is 15 minutes.
 
-## Invariant privasi
+Queued jobs also have an absolute deadline. If filesystem cleanup fails, the failure remains eligible for another cleanup attempt by the sweeper. The office runner has no published port and uses `network_mode: none`; API-to-runner communication is limited to the Unix socket.
 
-- Binary pengguna tidak masuk database, object storage, CDN cache, analytics, atau log.
-- Nama file asli hanya dipakai sesaat untuk validasi extension dan tidak disimpan dalam metadata job.
-- Response API memakai `Cache-Control: private, no-store`.
-- Browser output memakai object URL yang dicabut saat reset/unmount.
-- Registry menolak build bila tool `LOCAL_ONLY` menunjuk processor server.
-- Service worker tidak digunakan untuk request atau response file pengguna.
+## Privacy and security invariants
 
-## Menambah tool
+- Browser-local user files are not sent to the job API, and no silent server fallback exists.
+- User file contents are not stored in a database, object storage, CDN cache, analytics, or application logs.
+- The original filename is used briefly for extension validation but is not stored in server job metadata.
+- API file responses use `Cache-Control: private, no-store`.
+- Browser outputs use object URLs that are revoked during reset or unmount.
+- Registry validation rejects a `LOCAL_ONLY` tool mapped to a server processor and a `SERVER_EPHEMERAL` tool mapped to a browser processor.
+- A service worker is not used to intercept or cache user-file requests or responses.
+- The office runner remains non-root, read-only, network-disabled, capability-dropped, and backed by temporary scratch storage.
 
-Untuk varian yang memakai engine yang sudah ada, tambahkan definisi registry dan preset processor. Contohnya, preset image typed menentukan MIME input/output, extension output, dan apakah transparansi diratakan; engine tidak mengunci PNG/JPG di source. Route, metadata, breadcrumb, privacy badge, validasi awal, dan related tools akan mengikuti registry. Processor baru harus tetap mengimplementasikan kontrak bersama dan ditambahkan ke manifest agar validasi build dapat mendeteksi mapping yang hilang.
+These controls define the product's processing boundary; they are not a blanket regulatory or data-handling certification.
+
+## Staging topology
+
+The current preview environment publishes `apps/web/dist` through Cloudflare Workers Static Assets. Build-time `PUBLIC_APP_URL` and `PUBLIC_API_URL` values establish the canonical frontend origin, API endpoint, and CSP `connect-src` boundary.
+
+```text
+Cloudflare Workers static frontend
+  |\
+  | \-- LOCAL_ONLY tools -> browser processors and browser downloads
+  |
+  \---- SERVER_EPHEMERAL DOCX job
+          -> exact-origin CORS API hostname
+          -> Cloudflare Tunnel
+          -> 127.0.0.1:8080 Docker Compose API
+          -> Unix socket
+          -> network-disabled office-runner
+```
+
+The API remains bound to loopback and is not published directly on `0.0.0.0`. `API_ALLOWED_ORIGINS` contains the exact approved frontend origins; wildcard CORS is not part of the architecture. Tunnel credentials, processor tokens, server addresses, and local environment files remain outside the repository.
+
+This topology is a staging and portfolio preview, not a production-release claim. A production or tagged release remains blocked until the FFmpeg WASM provenance requirement is resolved. Deployment steps and operational checks are documented in [deployment.md](deployment.md).
+
+## Adding a tool
+
+For a new variant backed by an existing engine, add a tool definition to the registry and use an appropriate typed processor preset. For example, an image preset defines the input and output MIME types, output extension, and transparency-flattening behavior; the engine is not hard-coded to a single PNG-to-JPG route.
+
+The registry then drives the route, metadata, breadcrumb, privacy badge, initial validation, options, and related-tool presentation. A new processor must still implement the shared `JobExecutor` contract and be added to the processor manifest so build-time validation can detect missing or invalid mappings.

@@ -78,9 +78,58 @@ Read [the architecture guide](docs/architecture.md) for processing flows and sec
 
 ## Demo and staging
 
-The supported preview path uses a static host such as Cloudflare Pages for `apps/web/dist`, plus Docker Compose on a VPS for the Go API and LibreOffice runner. A Cloudflare Tunnel can expose the loopback-only API without directly publishing its port.
+### Live preview
 
-Use fixed HTTPS staging origins for `PUBLIC_APP_URL`, `PUBLIC_API_URL`, and `API_ALLOWED_ORIGINS`. Keep real domains, VPS addresses, tunnel credentials, and processor tokens out of Git. The full reproducible setup, including CSP/CORS verification, health checks, smoke tests, cleanup checks, and a placeholder-only Tunnel configuration, is in [docs/deployment.md](docs/deployment.md).
+- Frontend: [https://demo.atv-market.com](https://demo.atv-market.com)
+- Backend API: [https://api.atv-market.com](https://api.atv-market.com)
+
+The public staging deployment has been manually verified across every Phase 1 route and both target viewport sizes:
+
+| Check                                    | Result                         |
+| ---------------------------------------- | ------------------------------ |
+| Homepage `/`                             | Passed                         |
+| PNG to JPG `/image/png-to-jpg`           | Passed                         |
+| Merge PDF `/pdf/merge-pdf`               | Passed                         |
+| Video to GIF `/video/video-to-gif`       | Passed                         |
+| DOCX to PDF `/document/docx-to-pdf`      | Passed through the staging API |
+| Mobile layout                            | Passed at 390 px               |
+| Desktop layout                           | Passed at 1440 px              |
+| DOCX request target observed in DevTools | `https://api.atv-market.com`   |
+
+### Screenshots
+
+<table>
+  <thead>
+    <tr>
+      <th>Desktop (1440 x 900)</th>
+      <th>Mobile (390 x 844)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><img src="docs/screenshots/home-viewport-desktop.png" alt="AIO Converter homepage at a 1440 pixel desktop viewport"></td>
+      <td><img src="docs/screenshots/home-viewport-mobile.png" alt="AIO Converter homepage at a 390 pixel mobile viewport" width="390"></td>
+    </tr>
+  </tbody>
+</table>
+
+[Browse the full-page homepage and converter screenshots](docs/screenshots/).
+
+#### DOCX to PDF live API verification
+
+The following captures came from one live conversion of a synthetic DOCX. The browser reached the configured API, received the completed PDF, and downloaded the one-time output. Ephemeral job identifiers are redacted, and no credentials or tokens are shown.
+
+<p align="center">
+  <img src="docs/screenshots/docx-to-pdf-success-panel.png" alt="Successful DOCX to PDF conversion with the generated PDF ready to download" width="800">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/docx-api-request-evidence.png" alt="Captured DOCX job requests targeting api.atv-market.com with successful response statuses" width="1200">
+</p>
+
+The supported preview path uses Cloudflare Workers Static Assets or a similar static host for `apps/web/dist`, plus Docker Compose for the Go API and LibreOffice runner. A Cloudflare Tunnel exposes the loopback-only API without directly publishing its port.
+
+Use fixed HTTPS staging origins for `PUBLIC_APP_URL`, `PUBLIC_API_URL`, and `API_ALLOWED_ORIGINS`. Document only intentionally public staging origins; keep private hostnames, server addresses, tunnel credentials, and processor tokens out of Git. The full reproducible setup, including CSP/CORS verification, health checks, smoke tests, cleanup checks, and a placeholder-only Tunnel configuration, is in [docs/deployment.md](docs/deployment.md).
 
 Staging/demo deployment is appropriate for preview and portfolio use. It is not a production release claim while the FFmpeg provenance gate remains unresolved.
 
@@ -145,7 +194,7 @@ pnpm test:e2e
 - DOCX-to-PDF files are intentionally short-lived, but LibreOffice fidelity depends on the fonts and capabilities available in the runner image; a PDF may not precisely match Microsoft Word layout.
 - The API is designed for temporary processing, not as a persistent file store. Do not assume it meets a regulated-data requirement without an environment-specific security review.
 - Staging deployments should use HTTPS, exact-origin CORS, the existing CSP/security headers, and a loopback-only API behind an approved proxy or Tunnel. Do not weaken those controls to work around a deployment issue.
-- Do not commit `.env` files, user documents, real domains, server IPs, tunnel credentials, or processor tokens.
+- Do not commit `.env` files, user documents, private or unapproved hostnames, server IPs, tunnel credentials, or processor tokens.
 
 ## Release status and compliance
 
