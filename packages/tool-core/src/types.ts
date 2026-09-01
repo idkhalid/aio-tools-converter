@@ -5,13 +5,17 @@ export type ExecutionMode = "LOCAL_ONLY" | "SERVER_EPHEMERAL" | "REMOTE_FETCH";
 export type NativeImageMimeType = "image/jpeg" | "image/png" | "image/webp";
 export type ImageInputMimeType = NativeImageMimeType | "image/heic";
 export type ImageOutputMimeType = NativeImageMimeType | "image/x-icon";
+export type ImageOperation = "convert" | "compress" | "resize";
 
 export interface ImageConvertProcessorPreset {
   kind: "image-convert";
+  operation?: ImageOperation;
   inputMimeType: ImageInputMimeType;
+  inputMimeTypes?: readonly NativeImageMimeType[];
   outputMimeType: ImageOutputMimeType;
   outputExtension: "jpg" | "png" | "webp" | "ico";
   flattenTransparency: boolean;
+  preserveInputFormat?: boolean;
 }
 
 export type ProcessorPreset = ImageConvertProcessorPreset;
@@ -111,6 +115,11 @@ export interface ProcessOutput {
   mimeType: string;
   size: number;
   blob: Blob;
+  metadata?: Readonly<{
+    originalBytes?: number;
+    resultBytes?: number;
+    savedPercent?: number;
+  }>;
 }
 
 export interface JobExecutor {

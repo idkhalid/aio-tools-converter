@@ -106,6 +106,34 @@ export const toolHelpById: Readonly<Record<string, ToolHelp>> = {
       "HEIC metadata is not retained.",
     ],
   },
+  "image.compress-image": {
+    intro:
+      "JPEG, PNG, and WebP images are recompressed locally in your browser while keeping their original dimensions and format.",
+    steps: [
+      "Choose one or more JPEG, PNG, or WebP images.",
+      "Choose an output quality.",
+      "Process the queue and compare the original and result sizes.",
+    ],
+    limitations: [
+      "Compression is not guaranteed to make every file smaller.",
+      "PNG uses browser-native re-encoding rather than an advanced optimizer; the original is retained when re-encoding is not smaller.",
+      "Images above 40 megapixels are rejected and no server fallback is used.",
+    ],
+  },
+  "image.resize-image": {
+    intro:
+      "JPEG, PNG, and WebP images are resized locally in your browser with proportional scaling and high-quality browser smoothing.",
+    steps: [
+      "Choose one or more JPEG, PNG, or WebP images.",
+      "Enter the target width and height, keeping the aspect ratio locked by default.",
+      "Process the queue and download files named with their actual dimensions.",
+    ],
+    limitations: [
+      "When both dimensions are supplied with the aspect ratio locked, width drives the derived height.",
+      "Upscaling is allowed but does not add image detail.",
+      "Target dimensions above 40 megapixels are rejected and no server fallback is used.",
+    ],
+  },
   "pdf.merge-pdf": {
     intro:
       "The selected PDFs are parsed and copied into a new document in the order shown in the queue, entirely inside a browser worker.",

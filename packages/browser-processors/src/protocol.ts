@@ -1,5 +1,6 @@
 import type {
   ProcessProgress,
+  ProcessOutput,
   ProcessorPreset,
   SerializedToolError,
 } from "@aio-converter/tool-core";
@@ -21,6 +22,7 @@ export interface BufferProcessOutput {
   name: string;
   mimeType: string;
   data: Uint8Array;
+  metadata?: ProcessOutput["metadata"];
 }
 
 export interface BufferProcessContext {
@@ -58,6 +60,7 @@ export interface WorkerOutput {
   mimeType: string;
   size: number;
   data: ArrayBuffer;
+  metadata?: ProcessOutput["metadata"];
 }
 
 export type WorkerResponse =

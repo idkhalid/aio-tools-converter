@@ -53,9 +53,14 @@ function pngChunk(type: string, data: Uint8Array): Buffer {
   return Buffer.concat([length, typeBytes, data, checksum]);
 }
 
-export function syntheticPNG(red: number, green: number, blue: number, alpha = 255): Buffer {
-  const width = 3;
-  const height = 2;
+export function syntheticPNGWithDimensions(
+  width: number,
+  height: number,
+  red: number,
+  green: number,
+  blue: number,
+  alpha = 255,
+): Buffer {
   const rowLength = 1 + width * 4;
   const pixels = Buffer.alloc(rowLength * height);
   for (let y = 0; y < height; y += 1) {
@@ -81,6 +86,10 @@ export function syntheticPNG(red: number, green: number, blue: number, alpha = 2
     pngChunk("IDAT", deflateSync(pixels)),
     pngChunk("IEND", Buffer.alloc(0)),
   ]);
+}
+
+export function syntheticPNG(red: number, green: number, blue: number, alpha = 255): Buffer {
+  return syntheticPNGWithDimensions(3, 2, red, green, blue, alpha);
 }
 
 export async function syntheticPDF(
@@ -184,11 +193,15 @@ export async function attachSyntheticJPEG(page: Page): Promise<void> {
   await input.evaluate(async (element) => {
     const fileInput = element as HTMLInputElement;
     const canvas = document.createElement("canvas");
-    canvas.width = 8;
-    canvas.height = 5;
+    canvas.width = 64;
+    canvas.height = 48;
     const context = canvas.getContext("2d")!;
-    context.fillStyle = "#6d28d9";
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    for (let y = 0; y < canvas.height; y += 1) {
+      for (let x = 0; x < canvas.width; x += 1) {
+        context.fillStyle = `rgb(${(x * 5) % 256} ${(y * 7) % 256} ${((x + y) * 11) % 256})`;
+        context.fillRect(x, y, 1, 1);
+      }
+    }
     const blob = await new Promise<Blob>((resolve, reject) =>
       canvas.toBlob(
         (value) => (value ? resolve(value) : reject(new Error("JPEG unavailable"))),
@@ -198,6 +211,34 @@ export async function attachSyntheticJPEG(page: Page): Promise<void> {
     );
     const transfer = new DataTransfer();
     transfer.items.add(new File([blob], "synthetic.jpg", { type: "image/jpeg" }));
+    fileInput.files = transfer.files;
+    fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+export async function attachSyntheticWebP(page: Page): Promise<void> {
+  const input = page.getByTestId("drop-zone").locator('input[type="file"]');
+  await input.evaluate(async (element) => {
+    const fileInput = element as HTMLInputElement;
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 48;
+    const context = canvas.getContext("2d")!;
+    for (let y = 0; y < canvas.height; y += 1) {
+      for (let x = 0; x < canvas.width; x += 1) {
+        context.fillStyle = `rgb(${(x * 9) % 256} ${((x + y) * 3) % 256} ${(y * 13) % 256})`;
+        context.fillRect(x, y, 1, 1);
+      }
+    }
+    const blob = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (value) => (value ? resolve(value) : reject(new Error("WebP unavailable"))),
+        "image/webp",
+        0.9,
+      ),
+    );
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([blob], "synthetic.webp", { type: "image/webp" }));
     fileInput.files = transfer.files;
     fileInput.dispatchEvent(new Event("change", { bubbles: true }));
   });

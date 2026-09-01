@@ -2,15 +2,49 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   attachSyntheticWebM,
   attachSyntheticJPEG,
+  attachSyntheticWebP,
   inspectPDF,
   readDownload,
   syntheticPDF,
   syntheticPNG,
+  syntheticPNGWithDimensions,
   trackJobRequests,
   waitForToolHydration,
 } from "./fixtures";
 
 const uploadInput = (page: Page) => page.getByTestId("drop-zone").locator('input[type="file"]');
+
+function pngDimensions(bytes: Buffer): { width: number; height: number } {
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+}
+
+async function decodedImageInfo(
+  page: Page,
+  bytes: Buffer,
+): Promise<{ width: number; height: number; hasTransparency: boolean }> {
+  return page.evaluate(
+    async (values) => {
+      const bitmap = await createImageBitmap(new Blob([new Uint8Array(values)]));
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Canvas unavailable");
+      context.drawImage(bitmap, 0, 0);
+      const pixels = context.getImageData(0, 0, bitmap.width, bitmap.height).data;
+      bitmap.close();
+      let hasTransparency = false;
+      for (let index = 3; index < pixels.length; index += 4) {
+        if ((pixels[index] ?? 255) < 255) {
+          hasTransparency = true;
+          break;
+        }
+      }
+      return { width: canvas.width, height: canvas.height, hasTransparency };
+    },
+    [...bytes],
+  );
+}
 
 test.describe("Phase 2 image converters", () => {
   test("converts JPG images locally", async ({ page }) => {
@@ -131,6 +165,144 @@ test("batch PNG conversion downloads JPEGs and a real ZIP without server jobs", 
   expect(archive.includes(Buffer.from("photo one.jpg"))).toBe(true);
   expect(archive.includes(Buffer.from("blue.jpg"))).toBe(true);
   expect(archive.subarray(-64).includes(Buffer.from([0x50, 0x4b, 0x05, 0x06]))).toBe(true);
+  expect(jobRequests).toEqual([]);
+});
+
+test("compress image preserves format and reports honest size metadata", async ({ page }) => {
+  const jobRequests = trackJobRequests(page);
+  await page.goto("/image/compress-image");
+  await waitForToolHydration(page);
+  await uploadInput(page).setInputFiles({
+    name: "photo.png",
+    mimeType: "image/png",
+    buffer: syntheticPNG(30, 120, 220, 180),
+  });
+  await page.getByRole("button", { name: "Process files" }).click();
+  await expect(page.getByRole("heading", { name: "Your files are ready" })).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByRole("link", { name: "Download", exact: true })).toHaveAttribute(
+    "download",
+    "photo-compressed.png",
+  );
+  await expect(page.locator("span.block").filter({ hasText: /% smaller$/ })).toBeVisible();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download", exact: true }).click();
+  const output = await readDownload(await downloadPromise);
+  expect([...output.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  expect(pngDimensions(output)).toEqual({ width: 3, height: 2 });
+  await expect(decodedImageInfo(page, output)).resolves.toMatchObject({
+    width: 3,
+    height: 2,
+    hasTransparency: true,
+  });
+  expect(jobRequests).toEqual([]);
+});
+
+test("compress image accepts JPEG and WebP locally", async ({ page }) => {
+  const jobRequests = trackJobRequests(page);
+  for (const [attach, expectedName, signature] of [
+    [attachSyntheticJPEG, "synthetic-compressed.jpg", [0xff, 0xd8, 0xff]],
+    [attachSyntheticWebP, "synthetic-compressed.webp", [0x52, 0x49, 0x46, 0x46]],
+  ] as const) {
+    await page.goto("/image/compress-image");
+    await waitForToolHydration(page);
+    await page.getByLabel("Quality").fill("65");
+    await attach(page);
+    await page.getByRole("button", { name: "Process files" }).click();
+    await expect(page.getByRole("heading", { name: "Your files are ready" })).toBeVisible({
+      timeout: 30_000,
+    });
+    const link = page.getByRole("link", { name: "Download", exact: true });
+    await expect(link).toHaveAttribute("download", expectedName);
+    const downloadPromise = page.waitForEvent("download");
+    await link.click();
+    const output = await readDownload(await downloadPromise);
+    expect([...output.subarray(0, signature.length)]).toEqual(signature);
+    expect(output.byteLength).toBeGreaterThan(0);
+    await expect(decodedImageInfo(page, output)).resolves.toMatchObject({ width: 64, height: 48 });
+  }
+  expect(jobRequests).toEqual([]);
+});
+
+test("compress image quality changes JPEG encoding where supported", async ({ page }, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "chromium",
+    "WebKit's canvas encoder may ignore JPEG quality for this tiny synthetic fixture.",
+  );
+  const outputs: Buffer[] = [];
+  for (const quality of [20, 90]) {
+    await page.goto("/image/compress-image");
+    await waitForToolHydration(page);
+    await page.getByLabel("Quality").fill(String(quality));
+    await attachSyntheticJPEG(page);
+    await page.getByRole("button", { name: "Process files" }).click();
+    await expect(page.getByRole("heading", { name: "Your files are ready" })).toBeVisible({
+      timeout: 30_000,
+    });
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("link", { name: "Download", exact: true }).click();
+    outputs.push(await readDownload(await downloadPromise));
+  }
+  expect(outputs[0]).not.toEqual(outputs[1]);
+});
+
+test("resize image uses proportional dimensions, actual names, and ZIP batches", async ({
+  page,
+}) => {
+  const jobRequests = trackJobRequests(page);
+  await page.goto("/image/resize-image");
+  await waitForToolHydration(page);
+  await uploadInput(page).setInputFiles({
+    name: "photo.png",
+    mimeType: "image/png",
+    buffer: syntheticPNGWithDimensions(1200, 800, 220, 80, 30, 120),
+  });
+  await page.getByLabel("Width").fill("600");
+  await page.getByRole("button", { name: "Process files" }).click();
+  await expect(page.getByRole("heading", { name: "Your files are ready" })).toBeVisible({
+    timeout: 30_000,
+  });
+  const link = page.getByRole("link", { name: "Download", exact: true });
+  await expect(link).toHaveAttribute("download", "photo-600x400.png");
+  const downloadPromise = page.waitForEvent("download");
+  await link.click();
+  const output = await readDownload(await downloadPromise);
+  expect([...output.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  expect(pngDimensions(output)).toEqual({ width: 600, height: 400 });
+  await expect(decodedImageInfo(page, output)).resolves.toMatchObject({ hasTransparency: true });
+
+  await page.goto("/image/resize-image");
+  await waitForToolHydration(page);
+  await uploadInput(page).setInputFiles([
+    {
+      name: "landscape.png",
+      mimeType: "image/png",
+      buffer: syntheticPNGWithDimensions(1200, 800, 220, 80, 30),
+    },
+    {
+      name: "portrait.png",
+      mimeType: "image/png",
+      buffer: syntheticPNGWithDimensions(800, 1200, 30, 80, 220),
+    },
+  ]);
+  await page.getByLabel("Width").fill("400");
+  await page.getByRole("button", { name: "Process files" }).click();
+  await expect(page.getByRole("heading", { name: "Your files are ready" })).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByRole("link", { name: "Download", exact: true }).nth(0)).toHaveAttribute(
+    "download",
+    "landscape-400x267.png",
+  );
+  await expect(page.getByRole("link", { name: "Download", exact: true }).nth(1)).toHaveAttribute(
+    "download",
+    "portrait-400x600.png",
+  );
+  const archivePromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download all as ZIP" }).click();
+  const archive = await readDownload(await archivePromise);
+  expect([...archive.subarray(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
   expect(jobRequests).toEqual([]);
 });
 

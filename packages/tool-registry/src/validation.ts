@@ -78,13 +78,29 @@ export function validateRegistry(
       if (!preset || preset.kind !== "image-convert") {
         issues.push(`${tool.id}: image-convert requires an image processor preset`);
       } else {
-        if (!tool.accepts.includes(preset.inputMimeType)) {
-          issues.push(`${tool.id}: image preset input must be listed in accepts`);
+        const inputMimeTypes = preset.inputMimeTypes ?? [preset.inputMimeType];
+        for (const inputMimeType of inputMimeTypes) {
+          if (!tool.accepts.includes(inputMimeType)) {
+            issues.push(`${tool.id}: image preset input must be listed in accepts`);
+          }
+        }
+        if (preset.preserveInputFormat) {
+          for (const inputMimeType of inputMimeTypes) {
+            if (!tool.outputs.includes(inputMimeType)) {
+              issues.push(
+                `${tool.id}: preserving image format requires matching output MIME types`,
+              );
+            }
+          }
         }
         if (!tool.outputs.includes(preset.outputMimeType)) {
           issues.push(`${tool.id}: image preset output must be listed in outputs`);
         }
-        if (preset.outputMimeType === "image/jpeg" && !preset.flattenTransparency) {
+        if (
+          (preset.operation ?? "convert") === "convert" &&
+          preset.outputMimeType === "image/jpeg" &&
+          !preset.flattenTransparency
+        ) {
           issues.push(`${tool.id}: JPEG output must flatten transparency`);
         }
       }

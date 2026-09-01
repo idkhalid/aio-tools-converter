@@ -65,6 +65,97 @@ function imageTool(
   };
 }
 
+function imageUtilityTool(
+  id: string,
+  slug: string,
+  title: string,
+  operation: "compress" | "resize",
+  description: string,
+  seoDescription: string,
+) {
+  const options =
+    operation === "compress"
+      ? [
+          {
+            key: "quality",
+            type: "range" as const,
+            label: "Quality",
+            description: "Lower quality can reduce file size more, but may reduce detail.",
+            min: 1,
+            max: 100,
+            step: 1,
+            defaultValue: 80,
+          },
+        ]
+      : [
+          {
+            key: "width",
+            type: "number" as const,
+            label: "Width",
+            min: 1,
+            max: 40_000_000,
+            step: 1,
+            defaultValue: 800,
+            suffix: "px",
+          },
+          {
+            key: "height",
+            type: "number" as const,
+            label: "Height",
+            min: 1,
+            max: 40_000_000,
+            step: 1,
+            defaultValue: 600,
+            suffix: "px",
+          },
+          {
+            key: "lockAspectRatio",
+            type: "boolean" as const,
+            label: "Lock aspect ratio",
+            description: "When locked, width drives the derived height when both are supplied.",
+            defaultValue: true,
+          },
+          {
+            key: "quality",
+            type: "range" as const,
+            label: "Quality",
+            min: 1,
+            max: 100,
+            step: 1,
+            defaultValue: 90,
+          },
+        ];
+  return {
+    id,
+    slug,
+    category: "image" as const,
+    title,
+    shortDescription: description,
+    execution: "LOCAL_ONLY" as const,
+    processor: "image-convert" as const,
+    processorPreset: {
+      kind: "image-convert" as const,
+      operation,
+      inputMimeType: "image/jpeg" as const,
+      inputMimeTypes: ["image/jpeg", "image/png", "image/webp"] as const,
+      outputMimeType: "image/jpeg" as const,
+      outputExtension: "jpg" as const,
+      flattenTransparency: false,
+      preserveInputFormat: true,
+    },
+    accepts: ["image/jpeg", "image/png", "image/webp"],
+    outputs: ["image/jpeg", "image/png", "image/webp"],
+    minFiles: 1,
+    maxFiles: 50,
+    maxInputBytes: 50 * MB,
+    maxTotalBytes: 200 * MB,
+    timeoutMs: 2 * 60_000,
+    options,
+    seo: { title: `${title} Online`, description: seoDescription, canonicalPath: `/image/${slug}` },
+    status: "beta" as const,
+  };
+}
+
 export const toolDefinitions = [
   {
     id: "image.png-to-jpg",
@@ -184,6 +275,22 @@ export const toolDefinitions = [
     "png",
     "Decode HEIC images and convert them to PNG locally.",
     "Convert HEIC photos to PNG privately in your browser.",
+  ),
+  imageUtilityTool(
+    "image.compress-image",
+    "compress-image",
+    "Compress Image",
+    "compress",
+    "Reduce JPEG, PNG, or WebP file size locally in your browser.",
+    "Compress JPEG, PNG, and WebP images privately in your browser.",
+  ),
+  imageUtilityTool(
+    "image.resize-image",
+    "resize-image",
+    "Resize Image",
+    "resize",
+    "Resize JPEG, PNG, or WebP images locally while preserving their format.",
+    "Resize JPEG, PNG, and WebP images privately in your browser.",
   ),
   {
     id: "pdf.merge-pdf",

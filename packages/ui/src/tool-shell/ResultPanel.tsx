@@ -219,6 +219,14 @@ export function ResultPanel({
                 <span className="text-[0.85rem] text-slate-500">
                   {item.name.split(".").pop()?.toUpperCase()} &middot; {formatBytes(item.size)}
                 </span>
+                {item.metadata?.originalBytes !== undefined && (
+                  <span className="block text-[0.75rem] text-slate-400">
+                    {formatBytes(item.metadata.originalBytes)} → {formatBytes(item.size)}
+                    {item.metadata.savedPercent !== undefined
+                      ? ` · ${item.metadata.savedPercent}% smaller`
+                      : ""}
+                  </span>
+                )}
               </span>
             </div>
 

@@ -86,6 +86,7 @@ export class WorkerJobExecutor implements JobExecutor {
               mimeType: output.mimeType,
               size: output.size,
               blob: new Blob([output.data], { type: output.mimeType }),
+              ...(output.metadata ? { metadata: output.metadata } : {}),
             })),
           ),
         );

@@ -81,6 +81,7 @@ export function installProcessorWorker(processor: BufferProcessor): void {
               mimeType: output.mimeType,
               size: data.byteLength,
               data,
+              ...(output.metadata ? { metadata: output.metadata } : {}),
             };
           });
           endpoint.postMessage({ type: "result", jobId: job.id, outputs: serialized }, transfer);

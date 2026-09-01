@@ -80,6 +80,20 @@ export function deriveOutputFilename(inputName: string, outputExtension: string)
   return composeFilename(getBaseName(inputName), "", extension, `converted.${extension}`);
 }
 
+export function deriveOutputFilenameWithSuffix(
+  inputName: string,
+  suffix: string,
+  outputExtension: string,
+): string {
+  const extension = normalizeExtension(outputExtension);
+  return composeFilename(
+    getBaseName(inputName),
+    suffix,
+    extension,
+    `converted${suffix}.${extension}`,
+  );
+}
+
 export function deriveMergedPdfFilename(inputNames: readonly string[]): string {
   return composeFilename(getBaseName(inputNames[0] ?? ""), "-merged", "pdf", "merged.pdf");
 }

@@ -1,15 +1,88 @@
 import {
   asExactArrayBuffer,
-  dedupeFilenames,
   deriveOutputFilename,
+  deriveOutputFilenameWithSuffix,
   mimeTypeForExtension,
 } from "@aio-converter/shared";
-import { ToolError } from "@aio-converter/tool-core";
+import { ToolError, type ImageConvertProcessorPreset } from "@aio-converter/tool-core";
 import type { BufferProcessor } from "./protocol";
 import { decodeHeic } from "./heic";
 import { buildIco, ICO_SIZES } from "./ico";
 
 export const MAX_PIXELS = 40_000_000;
+
+export interface RasterDimensions {
+  width: number;
+  height: number;
+}
+
+function finitePositive(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+export function calculateResizeDimensions(
+  source: RasterDimensions,
+  options: Readonly<Record<string, unknown>>,
+): RasterDimensions {
+  const lockAspectRatio = options.lockAspectRatio !== false;
+  const width = options.width;
+  const height = options.height;
+  if (
+    (width !== undefined && !finitePositive(width)) ||
+    (height !== undefined && !finitePositive(height))
+  ) {
+    throw new ToolError("OPTION_INVALID", "Enter positive width and height values.");
+  }
+  if (!finitePositive(source.width) || !finitePositive(source.height)) {
+    throw new ToolError("FILE_SIGNATURE", "The image has invalid dimensions.");
+  }
+  if (lockAspectRatio) {
+    if (finitePositive(width)) {
+      const targetWidth = Math.round(width);
+      const targetHeight = Math.max(1, Math.round((targetWidth * source.height) / source.width));
+      return { width: targetWidth, height: targetHeight };
+    }
+    if (finitePositive(height)) {
+      const targetHeight = Math.round(height);
+      const targetWidth = Math.max(1, Math.round((targetHeight * source.width) / source.height));
+      return { width: targetWidth, height: targetHeight };
+    }
+  } else if (finitePositive(width) && finitePositive(height)) {
+    return { width: Math.round(width), height: Math.round(height) };
+  }
+  throw new ToolError("OPTION_INVALID", "Enter positive width and height values.");
+}
+
+export function outputExtensionForMime(mimeType: string): "jpg" | "png" | "webp" {
+  if (mimeType === "image/jpeg") return "jpg";
+  if (mimeType === "image/png") return "png";
+  return "webp";
+}
+
+export function operationForPreset(
+  preset: ImageConvertProcessorPreset,
+): "convert" | "compress" | "resize" {
+  return preset.operation ?? "convert";
+}
+
+export function outputName(
+  fileName: string,
+  operation: "convert" | "compress" | "resize",
+  extension: string,
+  dimensions: RasterDimensions,
+): string {
+  if (operation === "compress") {
+    return deriveOutputFilenameWithSuffix(fileName, "-compressed", extension);
+  }
+  if (operation === "resize") {
+    return deriveOutputFilenameWithSuffix(
+      fileName,
+      `-${dimensions.width}x${dimensions.height}`,
+      extension,
+    );
+  }
+  return deriveOutputFilename(fileName, extension);
+}
 
 export function validatePNGDimensions(data: Uint8Array): void {
   const signature = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -64,10 +137,22 @@ export const imageConvertProcessor: BufferProcessor = {
       typeof backgroundValue === "string" && /^#[0-9a-f]{6}$/i.test(backgroundValue)
         ? backgroundValue
         : "#ffffff";
-    const names = dedupeFilenames(
-      input.files.map((file) => deriveOutputFilename(file.name, preset.outputExtension)),
-    );
+    const operation = operationForPreset(preset);
     const outputs = [];
+    const usedNames = new Set<string>();
+    const uniqueName = (candidate: string): string => {
+      const dot = candidate.lastIndexOf(".");
+      const stem = dot > 0 ? candidate.slice(0, dot) : candidate;
+      const extension = dot > 0 ? candidate.slice(dot) : "";
+      let next = candidate;
+      let suffix = 2;
+      while (usedNames.has(next.toLowerCase())) {
+        next = `${stem}-${suffix}${extension}`;
+        suffix += 1;
+      }
+      usedNames.add(next.toLowerCase());
+      return next;
+    };
 
     for (const [index, file] of input.files.entries()) {
       if (context.signal.aborted) throw context.signal.reason;
@@ -76,17 +161,18 @@ export const imageConvertProcessor: BufferProcessor = {
         progress: index / input.files.length,
         message: `Decoding image ${index + 1} of ${input.files.length}`,
       });
-      const fileMimeType = file.mimeType || mimeTypeForExtension(file.name);
-      if (fileMimeType !== preset.inputMimeType) {
+      const fileMimeType = file.mimeType || mimeTypeForExtension(file.name) || "";
+      const acceptedMimeTypes: readonly string[] = preset.inputMimeTypes ?? [preset.inputMimeType];
+      if (!acceptedMimeTypes.includes(fileMimeType)) {
         throw new ToolError(
           "FILE_TYPE",
-          `Expected ${preset.inputMimeType}, but received another type.`,
+          "This image format is not supported by the selected tool.",
         );
       }
-      if (preset.inputMimeType === "image/png") validatePNGDimensions(file.data);
+      if (fileMimeType === "image/png") validatePNGDimensions(file.data);
 
       const heic =
-        preset.inputMimeType === "image/heic" ? await decodeHeic(file.data, MAX_PIXELS) : undefined;
+        fileMimeType === "image/heic" ? await decodeHeic(file.data, MAX_PIXELS) : undefined;
       if (!heic && typeof createImageBitmap !== "function") {
         throw new ToolError(
           "BROWSER_UNSUPPORTED",
@@ -96,26 +182,43 @@ export const imageConvertProcessor: BufferProcessor = {
       }
       const source = heic
         ? undefined
-        : new Blob([asExactArrayBuffer(file.data)], { type: preset.inputMimeType });
+        : new Blob([asExactArrayBuffer(file.data)], { type: fileMimeType });
       const bitmap = source ? await createImageBitmap(source) : undefined;
       try {
-        const width = heic?.width ?? bitmap?.width ?? 0;
-        const height = heic?.height ?? bitmap?.height ?? 0;
-        if (width * height > MAX_PIXELS) {
+        const sourceDimensions = {
+          width: heic?.width ?? bitmap?.width ?? 0,
+          height: heic?.height ?? bitmap?.height ?? 0,
+        };
+        if (sourceDimensions.width * sourceDimensions.height > MAX_PIXELS) {
           throw new ToolError(
             "FILE_TOO_LARGE",
             "An image has too many pixels to process safely in this browser.",
           );
         }
+        const dimensions =
+          operation === "resize"
+            ? calculateResizeDimensions(sourceDimensions, input.options)
+            : sourceDimensions;
+        if (dimensions.width * dimensions.height > MAX_PIXELS) {
+          throw new ToolError(
+            "FILE_TOO_LARGE",
+            "The requested dimensions are too large to process safely in this browser.",
+          );
+        }
+        const outputMimeType = operation === "convert" ? preset.outputMimeType : fileMimeType;
+        const outputExtension =
+          operation === "convert" ? preset.outputExtension : outputExtensionForMime(fileMimeType);
         const renderPng = async (size: number): Promise<Uint8Array> => {
           const canvas = new OffscreenCanvas(size, size);
           const drawingContext = canvas.getContext("2d", { alpha: true });
           if (!drawingContext)
             throw new ToolError("BROWSER_UNSUPPORTED", "Canvas encoding is unavailable.", false);
+          drawingContext.imageSmoothingEnabled = true;
+          drawingContext.imageSmoothingQuality = "high";
           drawingContext.clearRect(0, 0, size, size);
-          const scale = Math.min(size / width, size / height);
-          const drawWidth = Math.max(1, Math.round(width * scale));
-          const drawHeight = Math.max(1, Math.round(height * scale));
+          const scale = Math.min(size / sourceDimensions.width, size / sourceDimensions.height);
+          const drawWidth = Math.max(1, Math.round(sourceDimensions.width * scale));
+          const drawHeight = Math.max(1, Math.round(sourceDimensions.height * scale));
           const x = Math.floor((size - drawWidth) / 2);
           const y = Math.floor((size - drawHeight) / 2);
           if (preset.flattenTransparency) {
@@ -125,12 +228,12 @@ export const imageConvertProcessor: BufferProcessor = {
           if (heic) {
             const imageData = new ImageData(
               heic.data as unknown as Uint8ClampedArray<ArrayBuffer>,
-              width,
-              height,
+              sourceDimensions.width,
+              sourceDimensions.height,
             );
             drawingContext.putImageData(imageData, 0, 0);
-            if (drawWidth !== width || drawHeight !== height) {
-              const temp = new OffscreenCanvas(width, height);
+            if (drawWidth !== sourceDimensions.width || drawHeight !== sourceDimensions.height) {
+              const temp = new OffscreenCanvas(sourceDimensions.width, sourceDimensions.height);
               const tempContext = temp.getContext("2d");
               if (!tempContext)
                 throw new ToolError(
@@ -163,30 +266,56 @@ export const imageConvertProcessor: BufferProcessor = {
           }
           encoded = buildIco(iconImages);
         } else {
-          const canvas = new OffscreenCanvas(width, height);
+          const canvas = new OffscreenCanvas(dimensions.width, dimensions.height);
           const drawingContext = canvas.getContext("2d", { alpha: !preset.flattenTransparency });
           if (!drawingContext)
             throw new ToolError("BROWSER_UNSUPPORTED", "Canvas encoding is unavailable.", false);
+          drawingContext.imageSmoothingEnabled = true;
+          drawingContext.imageSmoothingQuality = "high";
           if (preset.flattenTransparency) {
             drawingContext.fillStyle = background;
-            drawingContext.fillRect(0, 0, width, height);
+            drawingContext.fillRect(0, 0, dimensions.width, dimensions.height);
           }
           if (heic)
             drawingContext.putImageData(
-              new ImageData(heic.data as unknown as Uint8ClampedArray<ArrayBuffer>, width, height),
+              new ImageData(
+                heic.data as unknown as Uint8ClampedArray<ArrayBuffer>,
+                sourceDimensions.width,
+                sourceDimensions.height,
+              ),
               0,
               0,
             );
-          else if (bitmap) drawingContext.drawImage(bitmap, 0, 0);
-          const outputBlob = await canvas.convertToBlob({ type: preset.outputMimeType, quality });
-          if (outputBlob.type !== preset.outputMimeType || outputBlob.size === 0)
+          else if (bitmap)
+            drawingContext.drawImage(bitmap, 0, 0, dimensions.width, dimensions.height);
+          const outputBlob = await canvas.convertToBlob({ type: outputMimeType, quality });
+          if (outputBlob.type !== outputMimeType || outputBlob.size === 0)
             throw new ToolError("PROCESSING_FAILED", "The browser could not encode this image.");
-          encoded = outputBlob;
+          encoded =
+            operation === "compress" &&
+            fileMimeType === "image/png" &&
+            outputBlob.size >= file.data.byteLength
+              ? file.data.slice()
+              : outputBlob;
         }
+        const outputData =
+          encoded instanceof Blob ? new Uint8Array(await encoded.arrayBuffer()) : encoded;
+        const metadata =
+          operation === "compress"
+            ? {
+                originalBytes: file.data.byteLength,
+                resultBytes: outputData.byteLength,
+                savedPercent: Math.max(
+                  0,
+                  Math.round((1 - outputData.byteLength / file.data.byteLength) * 100),
+                ),
+              }
+            : undefined;
         outputs.push({
-          name: names[index] ?? `converted-${index + 1}.${preset.outputExtension}`,
-          mimeType: preset.outputMimeType,
-          data: encoded instanceof Blob ? new Uint8Array(await encoded.arrayBuffer()) : encoded,
+          name: uniqueName(outputName(file.name, operation, outputExtension, dimensions)),
+          mimeType: outputMimeType,
+          data: outputData,
+          ...(metadata ? { metadata } : {}),
         });
       } finally {
         bitmap?.close();
