@@ -1,5 +1,6 @@
 export * from "./archive";
 export * from "./image-convert";
+export * from "./ico";
 export * from "./pdf-merge";
 export * from "./protocol";
 export * from "./video-to-gif";

@@ -19,6 +19,93 @@ export const toolHelpById: Readonly<Record<string, ToolHelp>> = {
       "No server fallback is used when worker canvas encoding is unavailable.",
     ],
   },
+  "image.jpg-to-png": {
+    intro: "JPG pixels are decoded and encoded as PNG entirely inside a disposable browser worker.",
+    steps: ["Choose one or more JPG images.", "Process the queue and download the PNG files."],
+    limitations: [
+      "Images above 40 megapixels are rejected.",
+      "No server fallback is used.",
+      "JPG source compression cannot be restored.",
+    ],
+  },
+  "image.jpg-to-webp": {
+    intro: "JPG pixels are converted to WebP locally in your browser.",
+    steps: [
+      "Choose one or more JPG images.",
+      "Set WebP quality.",
+      "Process and download the results.",
+    ],
+    limitations: [
+      "Images above 40 megapixels are rejected.",
+      "WebP quality is lossy.",
+      "No server fallback is used.",
+    ],
+  },
+  "image.png-to-webp": {
+    intro:
+      "PNG pixels are converted to WebP locally in your browser while preserving transparency.",
+    steps: [
+      "Choose one or more PNG images.",
+      "Set WebP quality.",
+      "Process and download the results.",
+    ],
+    limitations: [
+      "Images above 40 megapixels are rejected.",
+      "WebP quality is lossy.",
+      "No server fallback is used.",
+    ],
+  },
+  "image.jpg-to-ico": {
+    intro: "JPG pixels are fitted into a valid multi-resolution ICO entirely in your browser.",
+    steps: [
+      "Choose one or more JPG images.",
+      "Process the queue.",
+      "Download ICO files containing 16–256px PNG entries.",
+    ],
+    limitations: [
+      "Images above 40 megapixels are rejected.",
+      "Non-square images use transparent contain padding.",
+      "No server fallback is used.",
+    ],
+  },
+  "image.png-to-ico": {
+    intro:
+      "PNG pixels are fitted into a valid multi-resolution ICO while preserving alpha where possible.",
+    steps: [
+      "Choose one or more PNG images.",
+      "Process the queue.",
+      "Download ICO files containing 16–256px PNG entries.",
+    ],
+    limitations: [
+      "Images above 40 megapixels are rejected.",
+      "Non-square images use contain padding.",
+      "No server fallback is used.",
+    ],
+  },
+  "image.heic-to-jpg": {
+    intro:
+      "HEIC photos are decoded with the bundled LGPL libheif WASM decoder and encoded as JPG locally.",
+    steps: [
+      "Choose one or more HEIC photos.",
+      "Choose a background for transparent pixels.",
+      "Process and download the JPG files.",
+    ],
+    limitations: [
+      "Only the first top-level image is converted from multi-image HEIF files.",
+      "Images above 40 megapixels are rejected.",
+      "HEIC metadata is not retained.",
+    ],
+  },
+  "image.heic-to-png": {
+    intro:
+      "HEIC photos are decoded with the bundled LGPL libheif WASM decoder and encoded as PNG locally.",
+    steps: ["Choose one or more HEIC photos.", "Process the queue.", "Download the PNG files."],
+    limitations: [
+      "Only the first top-level image is converted from multi-image HEIF files.",
+      "Images above 40 megapixels are rejected.",
+      "HEIC metadata is not retained.",
+    ],
+  },
   "pdf.merge-pdf": {
     intro:
       "The selected PDFs are parsed and copied into a new document in the order shown in the queue, entirely inside a browser worker.",

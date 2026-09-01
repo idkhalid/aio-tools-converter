@@ -2,6 +2,69 @@ import type { ToolDefinition } from "@aio-converter/tool-core";
 
 const MB = 1024 * 1024;
 
+function imageTool(
+  id: string,
+  slug: string,
+  title: string,
+  inputMimeType: "image/jpeg" | "image/png" | "image/heic",
+  outputMimeType: "image/jpeg" | "image/png" | "image/webp" | "image/x-icon",
+  outputExtension: "jpg" | "png" | "webp" | "ico",
+  description: string,
+  seoDescription: string,
+  flattenTransparency = false,
+) {
+  const quality = outputMimeType === "image/jpeg" || outputMimeType === "image/webp";
+  return {
+    id,
+    slug,
+    category: "image" as const,
+    title,
+    shortDescription: description,
+    execution: "LOCAL_ONLY" as const,
+    processor: "image-convert" as const,
+    processorPreset: {
+      kind: "image-convert" as const,
+      inputMimeType,
+      outputMimeType,
+      outputExtension,
+      flattenTransparency,
+    },
+    accepts: [inputMimeType],
+    outputs: [outputMimeType],
+    minFiles: 1,
+    maxFiles: 50,
+    maxInputBytes: 50 * MB,
+    maxTotalBytes: 200 * MB,
+    timeoutMs: 2 * 60_000,
+    options: quality
+      ? [
+          {
+            key: "quality",
+            type: "range" as const,
+            label: "Quality",
+            min: 1,
+            max: 100,
+            step: 1,
+            defaultValue: 90,
+          },
+          ...(flattenTransparency
+            ? [
+                {
+                  key: "background",
+                  type: "color" as const,
+                  label: "Transparent background",
+                  description: "Transparent pixels use this color.",
+                  defaultValue: "#ffffff",
+                },
+              ]
+            : []),
+        ]
+      : [],
+    seo: { title: `${title} Online`, description: seoDescription, canonicalPath: `/image/${slug}` },
+    status: "beta" as const,
+  };
+}
+
 export const toolDefinitions = [
   {
     id: "image.png-to-jpg",
@@ -51,6 +114,77 @@ export const toolDefinitions = [
     },
     status: "beta",
   },
+  imageTool(
+    "image.jpg-to-png",
+    "jpg-to-png",
+    "JPG to PNG",
+    "image/jpeg",
+    "image/png",
+    "png",
+    "Convert JPG images to PNG locally in your browser.",
+    "Convert JPG files to PNG privately in your browser with no upload required.",
+  ),
+  imageTool(
+    "image.jpg-to-webp",
+    "jpg-to-webp",
+    "JPG to WebP",
+    "image/jpeg",
+    "image/webp",
+    "webp",
+    "Convert JPG images to WebP locally in your browser.",
+    "Convert JPG files to WebP privately in your browser with no upload required.",
+  ),
+  imageTool(
+    "image.png-to-webp",
+    "png-to-webp",
+    "PNG to WebP",
+    "image/png",
+    "image/webp",
+    "webp",
+    "Convert PNG images to WebP locally in your browser.",
+    "Convert PNG files to WebP privately in your browser with no upload required.",
+  ),
+  imageTool(
+    "image.jpg-to-ico",
+    "jpg-to-ico",
+    "JPG to ICO",
+    "image/jpeg",
+    "image/x-icon",
+    "ico",
+    "Create multi-resolution ICO files from JPG images locally.",
+    "Create valid multi-resolution ICO files from JPG images in your browser.",
+  ),
+  imageTool(
+    "image.png-to-ico",
+    "png-to-ico",
+    "PNG to ICO",
+    "image/png",
+    "image/x-icon",
+    "ico",
+    "Create multi-resolution ICO files from PNG images locally.",
+    "Create valid multi-resolution ICO files from PNG images in your browser.",
+  ),
+  imageTool(
+    "image.heic-to-jpg",
+    "heic-to-jpg",
+    "HEIC to JPG",
+    "image/heic",
+    "image/jpeg",
+    "jpg",
+    "Decode HEIC images and convert them to JPG locally.",
+    "Convert HEIC photos to JPG privately in your browser.",
+    true,
+  ),
+  imageTool(
+    "image.heic-to-png",
+    "heic-to-png",
+    "HEIC to PNG",
+    "image/heic",
+    "image/png",
+    "png",
+    "Decode HEIC images and convert them to PNG locally.",
+    "Convert HEIC photos to PNG privately in your browser.",
+  ),
   {
     id: "pdf.merge-pdf",
     slug: "merge-pdf",

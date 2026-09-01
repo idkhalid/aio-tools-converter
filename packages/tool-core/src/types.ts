@@ -3,12 +3,14 @@ export type ToolCategory = "image" | "pdf" | "document" | "gif" | "audio" | "vid
 export type ExecutionMode = "LOCAL_ONLY" | "SERVER_EPHEMERAL" | "REMOTE_FETCH";
 
 export type NativeImageMimeType = "image/jpeg" | "image/png" | "image/webp";
+export type ImageInputMimeType = NativeImageMimeType | "image/heic";
+export type ImageOutputMimeType = NativeImageMimeType | "image/x-icon";
 
 export interface ImageConvertProcessorPreset {
   kind: "image-convert";
-  inputMimeType: NativeImageMimeType;
-  outputMimeType: NativeImageMimeType;
-  outputExtension: "jpg" | "png" | "webp";
+  inputMimeType: ImageInputMimeType;
+  outputMimeType: ImageOutputMimeType;
+  outputExtension: "jpg" | "png" | "webp" | "ico";
   flattenTransparency: boolean;
 }
 

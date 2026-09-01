@@ -14,6 +14,15 @@ function localExecutor(tool: ToolDefinition): JobExecutor {
   };
   switch (tool.processor) {
     case "image-convert":
+      // WebKit's worker ImageBitmap decoder is unreliable for JPEG blobs;
+      // keep those conversions local while using the same canvas pipeline on
+      // the main thread. PNG and HEIC continue to use the worker when available.
+      if (
+        tool.processorPreset?.inputMimeType === "image/jpeg" ||
+        tool.processorPreset?.outputMimeType === "image/webp"
+      ) {
+        return new MainThreadImageExecutor(workerOptions);
+      }
       if (
         typeof OffscreenCanvas !== "undefined" &&
         typeof OffscreenCanvas.prototype.convertToBlob === "function"

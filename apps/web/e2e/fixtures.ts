@@ -178,3 +178,27 @@ export async function attachSyntheticWebM(page: Page): Promise<void> {
     fileInput.dispatchEvent(new Event("change", { bubbles: true }));
   });
 }
+
+export async function attachSyntheticJPEG(page: Page): Promise<void> {
+  const input = page.getByTestId("drop-zone").locator('input[type="file"]');
+  await input.evaluate(async (element) => {
+    const fileInput = element as HTMLInputElement;
+    const canvas = document.createElement("canvas");
+    canvas.width = 8;
+    canvas.height = 5;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#6d28d9";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (value) => (value ? resolve(value) : reject(new Error("JPEG unavailable"))),
+        "image/jpeg",
+        0.9,
+      ),
+    );
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([blob], "synthetic.jpg", { type: "image/jpeg" }));
+    fileInput.files = transfer.files;
+    fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}

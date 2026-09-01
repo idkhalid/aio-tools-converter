@@ -4,7 +4,9 @@ export const MIME_EXTENSIONS: Readonly<Record<string, readonly string[]>> = {
   "application/pdf": ["pdf"],
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ["docx"],
   "image/gif": ["gif"],
+  "image/heic": ["heic"],
   "image/jpeg": ["jpg", "jpeg"],
+  "image/x-icon": ["ico"],
   "image/png": ["png"],
   "image/webp": ["webp"],
   "video/mp4": ["mp4", "m4v"],
@@ -28,6 +30,16 @@ export function signatureMatches(mimeType: string, bytes: Uint8Array): boolean |
       return startsWith(bytes, [255, 216, 255]);
     case "image/webp":
       return bytes.length >= 12 && ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 4) === "WEBP";
+    case "image/heic": {
+      const brands = ["heic", "heix", "hevc", "hevx", "mif1", "msf1"];
+      return (
+        bytes.length >= 12 && ascii(bytes, 4, 4) === "ftyp" && brands.includes(ascii(bytes, 8, 4))
+      );
+    }
+    case "image/x-icon":
+      return (
+        bytes.length >= 6 && bytes[0] === 0 && bytes[1] === 0 && bytes[2] === 1 && bytes[3] === 0
+      );
     case "image/gif":
       return ascii(bytes, 0, 6) === "GIF87a" || ascii(bytes, 0, 6) === "GIF89a";
     case "application/pdf":

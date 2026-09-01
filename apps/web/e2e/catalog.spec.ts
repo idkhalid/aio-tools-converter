@@ -5,9 +5,16 @@ const routes = [
   ["/pdf/merge-pdf", "Merge PDF Files Online", "Processed on your device"],
   ["/video/video-to-gif", "Convert Video to GIF Online", "Processed on your device"],
   ["/document/docx-to-pdf", "Convert DOCX to PDF Online", "Temporary server processing"],
+  ["/image/jpg-to-png", "JPG to PNG Online", "Processed on your device"],
+  ["/image/jpg-to-webp", "JPG to WebP Online", "Processed on your device"],
+  ["/image/png-to-webp", "PNG to WebP Online", "Processed on your device"],
+  ["/image/jpg-to-ico", "JPG to ICO Online", "Processed on your device"],
+  ["/image/png-to-ico", "PNG to ICO Online", "Processed on your device"],
+  ["/image/heic-to-jpg", "HEIC to JPG Online", "Processed on your device"],
+  ["/image/heic-to-png", "HEIC to PNG Online", "Processed on your device"],
 ] as const;
 
-test("home lists every Phase 1 reference tool", async ({ page }) => {
+test("home lists every catalog tool", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Useful converters");
   for (const [path] of routes) {

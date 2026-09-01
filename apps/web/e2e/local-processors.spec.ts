@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
   attachSyntheticWebM,
+  attachSyntheticJPEG,
   inspectPDF,
   readDownload,
   syntheticPDF,
@@ -10,6 +11,72 @@ import {
 } from "./fixtures";
 
 const uploadInput = (page: Page) => page.getByTestId("drop-zone").locator('input[type="file"]');
+
+test.describe("Phase 2 image converters", () => {
+  test("converts JPG images locally", async ({ page }) => {
+    const jobRequests = trackJobRequests(page);
+    for (const [route, expectedName, signature] of [
+      ["/image/jpg-to-png", "synthetic.png", [137, 80, 78, 71]],
+      ["/image/jpg-to-webp", "synthetic.webp", [82, 73, 70, 70]],
+      ["/image/jpg-to-ico", "synthetic.ico", [0, 0, 1, 0]] as const,
+    ] as const) {
+      await page.goto(route);
+      await waitForToolHydration(page);
+      await attachSyntheticJPEG(page);
+      const processButton = page.getByRole("button", { name: "Process files" });
+      await expect(processButton).toBeEnabled();
+      await processButton.click();
+      await expect(page.getByRole("heading", { name: "Your files are ready" })).toBeVisible({
+        timeout: 30_000,
+      });
+      const link = page.getByRole("link", { name: "Download", exact: true });
+      await expect(link).toHaveAttribute("download", expectedName);
+      const downloadPromise = page.waitForEvent("download");
+      await link.click();
+      const bytes = await readDownload(await downloadPromise);
+      expect([...bytes.subarray(0, signature.length)]).toEqual(signature);
+      if (route.endsWith("ico")) expect(bytes[4]).toBe(6);
+    }
+    expect(jobRequests).toEqual([]);
+  });
+
+  test("converts PNG to WebP and valid multi-resolution ICO locally", async ({ page }) => {
+    const jobRequests = trackJobRequests(page);
+    for (const [route, expectedName] of [
+      ["/image/png-to-webp", "synthetic.webp"],
+      ["/image/png-to-ico", "synthetic.ico"],
+    ] as const) {
+      await page.goto(route);
+      await waitForToolHydration(page);
+      await uploadInput(page).setInputFiles({
+        name: "synthetic.png",
+        mimeType: "image/png",
+        buffer: syntheticPNG(100, 20, 220, 255),
+      });
+      const processButton = page.getByRole("button", { name: "Process files" });
+      await expect(processButton).toBeEnabled();
+      await processButton.click();
+      await expect(page.getByRole("heading", { name: "Your files are ready" })).toBeVisible({
+        timeout: 30_000,
+      });
+      const link = page.getByRole("link", { name: "Download", exact: true });
+      await expect(link).toHaveAttribute("download", expectedName);
+      const downloadPromise = page.waitForEvent("download");
+      await link.click();
+      const bytes = await readDownload(await downloadPromise);
+      if (route.endsWith("ico")) {
+        expect([...bytes.subarray(0, 6)]).toEqual([0, 0, 1, 0, 6, 0]);
+        expect(bytes.readUInt8(6)).toBe(16);
+        expect(bytes.readUInt8(22)).toBe(32);
+        expect(bytes.readUInt8(86)).toBe(0); // 256px is represented as zero in ICO.
+      } else {
+        expect(bytes.subarray(0, 4).toString("ascii")).toBe("RIFF");
+        expect(bytes.subarray(8, 12).toString("ascii")).toBe("WEBP");
+      }
+    }
+    expect(jobRequests).toEqual([]);
+  });
+});
 
 test("batch PNG conversion downloads JPEGs and a real ZIP without server jobs", async ({
   page,
