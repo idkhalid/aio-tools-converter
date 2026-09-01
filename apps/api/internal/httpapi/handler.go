@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aio-converter/api/internal/jobs"
@@ -23,6 +25,7 @@ const maxOptionsBytes = 64 * 1024
 
 type Config struct {
 	AllowedOrigins  []string
+	MetricsToken    string
 	MaxUploadBytes  int64
 	DownloadTimeout time.Duration
 	SSEHeartbeat    time.Duration
@@ -32,6 +35,7 @@ type Config struct {
 type Handler struct {
 	jobs            *jobs.Manager
 	allowedOrigins  map[string]struct{}
+	metricsToken    string
 	maxUploadBytes  int64
 	downloadTimeout time.Duration
 	sseHeartbeat    time.Duration
@@ -49,6 +53,7 @@ func New(cfg Config, manager *jobs.Manager) (*Handler, error) {
 	h := &Handler{
 		jobs:            manager,
 		allowedOrigins:  make(map[string]struct{}, len(cfg.AllowedOrigins)),
+		metricsToken:    cfg.MetricsToken,
 		maxUploadBytes:  cfg.MaxUploadBytes,
 		downloadTimeout: cfg.DownloadTimeout,
 		sseHeartbeat:    cfg.SSEHeartbeat,
@@ -94,7 +99,11 @@ func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (h *Handler) metrics(w http.ResponseWriter, _ *http.Request) {
+func (h *Handler) metrics(w http.ResponseWriter, r *http.Request) {
+	if !h.metricsAuthorized(r) {
+		writeError(w, http.StatusNotFound, "not_found", "This endpoint does not exist.")
+		return
+	}
 	metrics := h.jobs.Metrics()
 	var memory runtime.MemStats
 	runtime.ReadMemStats(&memory)
@@ -114,10 +123,22 @@ func (h *Handler) metrics(w http.ResponseWriter, _ *http.Request) {
 	)
 }
 
+func (h *Handler) metricsAuthorized(r *http.Request) bool {
+	if h.metricsToken == "" {
+		return false
+	}
+	provided := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(h.metricsToken)) == 1
+}
+
 func (h *Handler) createJob(w http.ResponseWriter, r *http.Request) {
 	tool, ok := tools.Lookup(r.PathValue("toolId"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "unknown_tool", "This server tool does not exist.")
+		return
+	}
+	if r.ContentLength > h.maxUploadBytes {
+		writeError(w, http.StatusRequestEntityTooLarge, "file_too_large", "The document exceeds the upload limit.")
 		return
 	}
 

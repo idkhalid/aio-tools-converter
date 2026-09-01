@@ -68,6 +68,7 @@ Configure build variables separately for the production and preview triggers whe
 | ---------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `API_ALLOWED_ORIGINS`        | `https://staging.example.invalid` | Exact-origin CORS allowlist; comma-separated when needed. Wildcard origins are rejected.                 |
 | `API_ADDR`                   | `:8080`                           | API listener inside Compose. The Compose port mapping remains bound to `127.0.0.1`.                      |
+| `API_METRICS_TOKEN`          | Inject from a secret manager      | Optional bearer token for trusted local metrics. Leave empty to disable `/metrics` with a 404 response.  |
 | `API_PROCESSOR_TOKEN`        | Inject from a secret manager      | Shared token for API-to-runner calls. Use a non-empty secret in staging and never commit it.             |
 | `API_JOB_ROOT`               | `/work/jobs`                      | Ephemeral API job root mounted as tmpfs by Compose.                                                      |
 | `API_JOB_TTL`                | `15m`                             | Job retention window; the API accepts at most `15m`.                                                     |
@@ -179,7 +180,7 @@ Preserve the current Compose security boundary:
 - The `office-socket` volume is tmpfs IPC storage, not user-file storage.
 - Both services remain non-root with read-only filesystems, dropped capabilities, `no-new-privileges`, and resource limits.
 
-Keep `/metrics` on a trusted monitoring path. Do not publish it through the public API hostname, and do not configure access logs to retain filenames, multipart bodies, query strings, or user output.
+`/metrics` is disabled by default. If trusted local monitoring needs it, set `API_METRICS_TOKEN` only through the server secret workflow and send `Authorization: Bearer <token>` from the monitoring client. Do not publish the path through the public API hostname, and do not configure access logs to retain filenames, multipart bodies, query strings, authorization values, or user output.
 
 ## 4. Publish the API through Cloudflare Tunnel (optional)
 
@@ -193,6 +194,9 @@ tunnel: 00000000-0000-0000-0000-000000000000
 credentials-file: /etc/cloudflared/00000000-0000-0000-0000-000000000000.json
 
 ingress:
+  - hostname: api-staging.example.invalid
+    path: ^/metrics$
+    service: http_status:404
   - hostname: api-staging.example.invalid
     service: http://127.0.0.1:8080
   - service: http_status:404
@@ -329,6 +333,32 @@ At approximately 390 px mobile width and 1440 px desktop width, also verify:
 - Privacy copy distinguishes browser-local processing from server-ephemeral DOCX processing.
 - The DOCX request target is the configured API origin, not localhost or the frontend origin.
 
+### Controlled fault checks
+
+Run these only in a staging maintenance window. They intentionally interrupt DOCX-to-PDF, but do not affect the browser-local tools or require Cloudflare configuration changes.
+
+To verify office-runner recovery, stop the runner and confirm that the API readiness endpoint reports the dependency as unavailable:
+
+```bash
+docker compose --env-file .env.staging stop office-runner
+curl --silent --show-error --output /dev/null --write-out '%{http_code}\n' "$PUBLIC_API_URL/healthz"
+# Expected: 503
+```
+
+While it is stopped, submit `staging-smoke.docx` with the DOCX API flow above. The accepted job must reach `failed` with the public `processor_unavailable` error code, without a filename or filesystem path in the response. Confirm both temporary-job locations are empty, start the runner, wait for `/healthz` to return `200`, then repeat the normal DOCX smoke test successfully:
+
+```bash
+docker compose --env-file .env.staging start office-runner
+until curl --fail --silent --output /dev/null "$PUBLIC_API_URL/healthz"; do sleep 1; done
+```
+
+To verify the intentionally in-memory API restart model, create a successful DOCX job with the smoke flow but pause before requesting its output. Restart the API, wait for `/healthz` to return `200`, then request that old job's output URL. It must return `404`, never expose the previous PDF, and both temporary-job locations must be empty. Repeat with a newly accepted, still-processing job to confirm it also disappears safely after the restart. Finally, run a fresh DOCX smoke test to prove recovery:
+
+```bash
+docker compose --env-file .env.staging restart api
+until curl --fail --silent --output /dev/null "$PUBLIC_API_URL/healthz"; do sleep 1; done
+```
+
 ### Cleanup and log verification
 
 After completion, cancellation, or timeout, verify that the tmpfs job areas are empty and logs contain no file content:
@@ -341,6 +371,8 @@ docker compose --env-file .env.staging logs --since 15m api office-runner
 
 The `find` commands should produce no job artifacts after lifecycle cleanup. Review logs only for aggregate status, health, and safe errors. Do not copy user files or sensitive request data into issue trackers, analytics, or external log stores.
 
+The API emits structured lifecycle records for queued and terminal jobs, plus a safe cleanup-retry warning if artifact removal fails. These records include the random job ID, tool ID, terminal status, duration, and public error code only; they intentionally omit filenames, document content, tokens, and filesystem paths.
+
 ## Staging checklist
 
 - [ ] The deployed commit contains the repository-root `wrangler.jsonc` and its Worker name matches the Cloudflare project.
@@ -350,6 +382,7 @@ The `find` commands should produce no job artifacts after lifecycle cleanup. Rev
 - [ ] API and `office-runner` are healthy in Compose; the API remains bound to loopback on the host.
 - [ ] The Tunnel connector is healthy, uses an exact public hostname, and stores no token or credentials in the repository.
 - [ ] CORS preflight returns the exact frontend origin and API responses retain `private, no-store`.
+- [ ] `/metrics` is disabled unless a trusted monitoring token is configured; the Tunnel rejects the public metrics path.
 - [ ] DOCX to PDF creates an ephemeral job, receives SSE progress, produces a valid PDF, and permits only one output download.
 - [ ] PNG to JPG, Merge PDF, and Video to GIF complete without `/v1/jobs` requests.
 - [ ] Job tmpfs directories are clean after success, cancellation, timeout, and restart; logs contain no user-file data.

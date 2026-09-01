@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -36,6 +38,7 @@ type Config struct {
 	ProcessTimeout time.Duration
 	Concurrency    int
 	QueueSize      int
+	Logger         *slog.Logger
 }
 
 type Manager struct {
@@ -51,6 +54,7 @@ type Manager struct {
 	rootCancel context.CancelFunc
 	wg         sync.WaitGroup
 	closeOnce  sync.Once
+	logger     *slog.Logger
 
 	processorRuns  atomic.Uint64
 	processorNanos atomic.Uint64
@@ -94,6 +98,10 @@ func NewManager(cfg Config, processors ...processing.Processor) (*Manager, error
 		processorMap[processor.ID()] = processor
 	}
 
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
 	rootCtx, rootCancel := context.WithCancel(context.Background())
 	capacity := cfg.Concurrency + cfg.QueueSize
 	m := &Manager{
@@ -104,6 +112,7 @@ func NewManager(cfg Config, processors ...processing.Processor) (*Manager, error
 		admissions: make(chan struct{}, capacity),
 		rootCtx:    rootCtx,
 		rootCancel: rootCancel,
+		logger:     logger,
 	}
 	for range cfg.Concurrency {
 		m.wg.Add(1)
@@ -215,6 +224,7 @@ func (m *Manager) Enqueue(id string) error {
 
 	select {
 	case m.queue <- j:
+		m.logger.Info("job queued", "job_id", j.id, "tool_id", j.tool.ID)
 		return nil
 	case <-m.rootCtx.Done():
 		m.Discard(id)
@@ -394,7 +404,10 @@ func (m *Manager) SweepExpired(now time.Time) {
 			recordQueueTimeout = true
 		}
 		expired := j.expiresAt != nil && !now.Before(*j.expiresAt) && !j.outputClaimed
-		purge := (j.deleted && !j.outputClaimed) || expired
+		// A claimed output is normally removed by OutputLease.Finish. If that
+		// cleanup fails after a disconnected download, the job is still marked
+		// deleted and must be retried by the sweeper rather than retained forever.
+		purge := j.deleted || expired
 		removeArtifacts := j.status.Terminal() && j.status != StatusSucceeded
 		if purge {
 			j.deleted = true
@@ -404,23 +417,31 @@ func (m *Manager) SweepExpired(now time.Time) {
 		if recordQueueTimeout {
 			m.recordTerminal(j, StatusTimedOut, 0)
 		}
-		if removeArtifacts {
-			if err := os.RemoveAll(j.dir); err == nil {
-				m.releaseAdmission(j)
-			}
-		}
 		if purge {
 			_ = m.purge(j)
+		} else if removeArtifacts {
+			if err := m.removeArtifacts(j); err == nil {
+				m.releaseAdmission(j)
+			}
 		}
 	}
 }
 
 func (m *Manager) purge(j *job) error {
-	if err := os.RemoveAll(j.dir); err != nil {
+	if err := m.removeArtifacts(j); err != nil {
 		return err
 	}
 	m.remove(j)
 	m.releaseAdmission(j)
+	return nil
+}
+
+func (m *Manager) removeArtifacts(j *job) error {
+	if err := os.RemoveAll(j.dir); err != nil {
+		// Do not include the OS error: it can contain a job filesystem path.
+		m.logger.Warn("job cleanup retry required", "job_id", j.id, "tool_id", j.tool.ID)
+		return err
+	}
 	return nil
 }
 
@@ -541,10 +562,11 @@ func (m *Manager) run(j *job) {
 
 	if status != StatusSucceeded || deleted {
 		j.cancel()
-		_ = os.RemoveAll(j.dir)
 	}
 	if deleted {
 		_ = m.purge(j)
+	} else if status != StatusSucceeded {
+		_ = m.removeArtifacts(j)
 	}
 }
 
@@ -600,6 +622,22 @@ func (m *Manager) recordTerminal(j *job, status Status, duration time.Duration) 
 		case StatusCanceled:
 			m.canceledJobs.Add(1)
 		}
+		j.mu.Lock()
+		errorCode := ""
+		if j.publicErr != nil {
+			errorCode = j.publicErr.Code
+		}
+		j.mu.Unlock()
+		attributes := []any{
+			"job_id", j.id,
+			"tool_id", j.tool.ID,
+			"status", status,
+			"duration_ms", duration.Milliseconds(),
+		}
+		if errorCode != "" {
+			attributes = append(attributes, "error_code", errorCode)
+		}
+		m.logger.Info("job reached terminal state", attributes...)
 	})
 }
 

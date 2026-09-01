@@ -1,6 +1,31 @@
 import { expect, test } from "@playwright/test";
 import { readDownload, syntheticDOCX, waitForToolHydration } from "./fixtures";
 
+test("DOCX reports an unavailable API without falling back to browser processing", async ({
+  page,
+}) => {
+  const jobRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith("/v1/jobs"))
+      jobRequests.push(`${request.method()} ${url.pathname}`);
+  });
+  await page.route("**/v1/jobs/**", (route) => route.abort("connectionfailed"));
+
+  await page.goto("/document/docx-to-pdf");
+  await waitForToolHydration(page);
+  await page.getByTestId("drop-zone").locator('input[type="file"]').setInputFiles({
+    name: "staging-api-unavailable.docx",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    buffer: syntheticDOCX(),
+  });
+  await page.getByRole("button", { name: "Process files" }).click();
+
+  await expect(page.getByRole("heading", { name: "Converter service unavailable" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again" })).toBeEnabled();
+  expect(jobRequests).toEqual(["POST /v1/jobs/document.docx-to-pdf"]);
+});
+
 test("DOCX converts through the ephemeral API and downloads a complete PDF", async ({
   page,
 }, testInfo) => {

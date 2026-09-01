@@ -18,6 +18,7 @@ const maxJobTTL = 15 * time.Minute
 type Config struct {
 	Addr              string
 	AllowedOrigins    []string
+	MetricsToken      string
 	JobRoot           string
 	JobTTL            time.Duration
 	MaxConcurrentJobs int
@@ -34,6 +35,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		Addr:              env("API_ADDR", ":8080"),
 		AllowedOrigins:    splitCSV(env("API_ALLOWED_ORIGINS", "http://localhost:4321")),
+		MetricsToken:      os.Getenv("API_METRICS_TOKEN"),
 		JobRoot:           env("API_JOB_ROOT", "/work/jobs"),
 		JobTTL:            durationEnv("API_JOB_TTL", 15*time.Minute),
 		MaxConcurrentJobs: intEnv("API_MAX_CONCURRENT_JOBS", 1),

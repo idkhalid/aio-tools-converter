@@ -12,6 +12,7 @@ services:
     environment:
       API_ADDR: ${API_ADDR:-:8080}
       API_ALLOWED_ORIGINS: ${API_ALLOWED_ORIGINS:-http://localhost:4321}
+      API_METRICS_TOKEN: ${API_METRICS_TOKEN:-}
       API_DOWNLOAD_TIMEOUT: ${API_DOWNLOAD_TIMEOUT:-10m}
       API_JOB_ROOT: ${API_JOB_ROOT:-/work/jobs}
       API_JOB_TTL: ${API_JOB_TTL:-15m}

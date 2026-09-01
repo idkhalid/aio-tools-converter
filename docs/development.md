@@ -61,7 +61,7 @@ AIO_REQUIRE_PUBLIC_ORIGINS=1 \
 pnpm --filter @aio-converter/web build
 ```
 
-Use real staging origins only in local ignored environment files or the deployment provider. The full Pages, Compose, Tunnel, CORS, and smoke-test procedure is in [deployment.md](deployment.md).
+Use real staging origins only in local ignored environment files or the deployment provider. The full Workers Static Assets, Compose, Tunnel, CORS, and smoke-test procedure is in [deployment.md](deployment.md).
 
 The Go API can be tested on the host without LibreOffice because its integration tests use an injected processor:
 

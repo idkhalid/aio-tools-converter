@@ -1,11 +1,14 @@
 package jobs
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -202,6 +205,29 @@ func TestManagerBoundsAdmissionAndExpiresOutput(t *testing.T) {
 		m.Discard(firstID)
 	})
 
+	t.Run("claimed output cleanup retry", func(t *testing.T) {
+		cfg := defaultManagerConfig(t)
+		m := managerForTest(t, cfg, successProcessor())
+		id, _ := submitTestJob(t, m)
+		waitForStatus(t, m, id, StatusSucceeded)
+		lease, err := m.OpenOutput(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := lease.File.Close(); err != nil {
+			t.Fatal(err)
+		}
+		pending, err := m.Delete(context.Background(), id)
+		if err != nil || !pending {
+			t.Fatalf("claimed output delete result pending=%v err=%v", pending, err)
+		}
+		m.SweepExpired(time.Now())
+		if _, err := m.Get(id); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("claimed output job was not purged: %v", err)
+		}
+		assertEmptyDir(t, cfg.Root)
+	})
+
 	t.Run("TTL", func(t *testing.T) {
 		cfg := defaultManagerConfig(t)
 		cfg.TTL = 25 * time.Millisecond
@@ -317,6 +343,112 @@ func TestManagerCapsProgressSubscribers(t *testing.T) {
 		unsubscribe()
 	}
 	m.Discard(id)
+}
+
+func TestManagerCloseCancelsActiveJobAndLeavesNoRestartArtifacts(t *testing.T) {
+	started := make(chan struct{})
+	processor := fakeProcessor{process: func(ctx context.Context, _, _ string, _ processing.ReportFunc) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	}}
+	cfg := defaultManagerConfig(t)
+	m := managerForTest(t, cfg, processor)
+	_, _ = submitTestJob(t, m)
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("processor did not start")
+	}
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+	assertEmptyDir(t, cfg.Root)
+
+	resumed := managerForTest(t, cfg, successProcessor())
+	id, _ := submitTestJob(t, resumed)
+	waitForStatus(t, resumed, id, StatusSucceeded)
+}
+
+func TestManagerConcurrentJobsKeepInputsAndOutputsIsolated(t *testing.T) {
+	processor := fakeProcessor{process: func(_ context.Context, input, output string, _ processing.ReportFunc) error {
+		marker, err := os.ReadFile(input)
+		if err != nil {
+			return err
+		}
+		pdf := append([]byte("%PDF-1.4\n% "), marker...)
+		pdf = append(pdf, []byte("\n%%EOF\n")...)
+		return os.WriteFile(output, pdf, 0o600)
+	}}
+	cfg := defaultManagerConfig(t)
+	cfg.Concurrency = 2
+	cfg.QueueSize = 0
+	m := managerForTest(t, cfg, processor)
+	tool, _ := tools.Lookup(tools.DocxToPDFToolID)
+
+	create := func(marker string) string {
+		t.Helper()
+		id, inputPath, err := m.Create(tool)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(inputPath, []byte(marker), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Enqueue(id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+
+	alphaID := create("alpha-only")
+	betaID := create("beta-only")
+	for _, expected := range []struct {
+		id     string
+		marker string
+	}{{alphaID, "alpha-only"}, {betaID, "beta-only"}} {
+		waitForStatus(t, m, expected.id, StatusSucceeded)
+		lease, err := m.OpenOutput(expected.id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		output, readErr := io.ReadAll(lease.File)
+		finishErr := lease.Finish()
+		if readErr != nil || finishErr != nil {
+			t.Fatalf("read/cleanup output: %v %v", readErr, finishErr)
+		}
+		if !bytes.Contains(output, []byte(expected.marker)) {
+			t.Fatalf("output for %s did not preserve its input marker", expected.id)
+		}
+	}
+	assertEmptyDir(t, cfg.Root)
+}
+
+func TestManagerLogsSafeTerminalLifecycleData(t *testing.T) {
+	var logs bytes.Buffer
+	cfg := defaultManagerConfig(t)
+	cfg.Logger = slog.New(slog.NewJSONHandler(&logs, nil))
+	processor := fakeProcessor{process: func(_ context.Context, _, _ string, _ processing.ReportFunc) error {
+		return processing.NewFailure(
+			"processor_unavailable",
+			"The document processor is temporarily unavailable.",
+			errors.New("internal failure at /work/jobs/private-name.docx"),
+		)
+	}}
+	m := managerForTest(t, cfg, processor)
+	id, _ := submitTestJob(t, m)
+	waitForStatus(t, m, id, StatusFailed)
+	output := logs.String()
+	for _, required := range []string{"\"job_id\"", "\"tool_id\"", "\"status\":\"failed\"", "\"duration_ms\"", "\"error_code\":\"processor_unavailable\""} {
+		if !strings.Contains(output, required) {
+			t.Fatalf("missing lifecycle field %q in %s", required, output)
+		}
+	}
+	for _, forbidden := range []string{"private-name", "/work/jobs", "internal failure"} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("unsafe internal detail leaked to logs: %s", output)
+		}
+	}
 }
 
 func assertEmptyDir(t *testing.T, root string) {

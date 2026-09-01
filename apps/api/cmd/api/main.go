@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,6 +19,7 @@ import (
 
 func main() {
 	logger := log.New(os.Stderr, "aio-api: ", log.Ldate|log.Ltime|log.LUTC)
+	jobLogger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	cfg, err := config.Load()
 	if err != nil {
 		logger.Fatalf("invalid configuration: %v", err)
@@ -39,6 +41,7 @@ func main() {
 		ProcessTimeout: cfg.ProcessTimeout,
 		Concurrency:    cfg.MaxConcurrentJobs,
 		QueueSize:      cfg.MaxQueuedJobs,
+		Logger:         jobLogger,
 	}, office)
 	if err != nil {
 		logger.Fatalf("start job manager: %v", err)
@@ -46,6 +49,7 @@ func main() {
 
 	handler, err := httpapi.New(httpapi.Config{
 		AllowedOrigins:  cfg.AllowedOrigins,
+		MetricsToken:    cfg.MetricsToken,
 		MaxUploadBytes:  cfg.MaxUploadBytes,
 		DownloadTimeout: cfg.DownloadTimeout,
 		SSEHeartbeat:    15 * time.Second,
