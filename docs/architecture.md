@@ -9,6 +9,10 @@ Phase 1 intentionally supports two execution modes:
 
 `REMOTE_FETCH` exists in the shared type model but is not part of Phase 1.
 
+Office-processor transport is explicit: Unix sockets remain the default for
+local Compose, while authenticated TCP is available only for trusted private
+container networks. There is no automatic fallback between transports.
+
 ## Module boundaries
 
 | Module or runtime boundary                | Responsibility                                                                                                |
@@ -59,7 +63,7 @@ Browser
   -> multipart POST to the Go API
   -> random API job directory in tmpfs
   -> queued in-memory job with an absolute deadline
-  -> HTTP over a shared Unix socket
+  -> HTTP over the configured Unix socket (default) or private TCP endpoint
   -> network-disabled office-runner container
   -> temporary office-runner job directory in tmpfs
   -> LibreOffice subprocess in its own process group
@@ -70,7 +74,7 @@ Browser
 
 The API owns the `toolId -> processor` mapping; the client cannot select a binary or arbitrary processor. Job metadata exists only in memory. The API removes the input after processing. It removes the output after its first download, cancellation, failure, timeout, shutdown, or the configured TTL, whose accepted maximum is 15 minutes.
 
-Queued jobs also have an absolute deadline. If filesystem cleanup fails, the failure remains eligible for another cleanup attempt by the sweeper. The office runner has no published port and uses `network_mode: none`; API-to-runner communication is limited to the Unix socket.
+Queued jobs also have an absolute deadline. If filesystem cleanup fails, the failure remains eligible for another cleanup attempt by the sweeper. The office runner has no published port and uses `network_mode: none` in the existing Compose deployment. TCP mode is intended only for a separate private container network, requires processor-token authentication, and must never be exposed to the public Internet.
 
 ## Privacy and security invariants
 

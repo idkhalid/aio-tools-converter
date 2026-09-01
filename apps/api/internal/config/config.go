@@ -16,36 +16,40 @@ const maxJobTTL = 15 * time.Minute
 // Config contains all runtime settings for the public API. Every value is
 // validated before the server creates a listener or writes a job artifact.
 type Config struct {
-	Addr              string
-	AllowedOrigins    []string
-	MetricsToken      string
-	JobRoot           string
-	JobTTL            time.Duration
-	MaxConcurrentJobs int
-	MaxQueuedJobs     int
-	MaxUploadBytes    int64
-	ProcessTimeout    time.Duration
-	DownloadTimeout   time.Duration
-	ShutdownTimeout   time.Duration
-	ProcessorSocket   string
-	ProcessorToken    string
+	Addr               string
+	AllowedOrigins     []string
+	MetricsToken       string
+	JobRoot            string
+	JobTTL             time.Duration
+	MaxConcurrentJobs  int
+	MaxQueuedJobs      int
+	MaxUploadBytes     int64
+	ProcessTimeout     time.Duration
+	DownloadTimeout    time.Duration
+	ShutdownTimeout    time.Duration
+	ProcessorTransport string
+	ProcessorSocket    string
+	ProcessorURL       string
+	ProcessorToken     string
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		Addr:              env("API_ADDR", ":8080"),
-		AllowedOrigins:    splitCSV(env("API_ALLOWED_ORIGINS", "http://localhost:4321")),
-		MetricsToken:      os.Getenv("API_METRICS_TOKEN"),
-		JobRoot:           env("API_JOB_ROOT", "/work/jobs"),
-		JobTTL:            durationEnv("API_JOB_TTL", 15*time.Minute),
-		MaxConcurrentJobs: intEnv("API_MAX_CONCURRENT_JOBS", 1),
-		MaxQueuedJobs:     intEnv("API_MAX_QUEUED_JOBS", 8),
-		MaxUploadBytes:    int64Env("API_MAX_UPLOAD_BYTES", 262_144_000),
-		ProcessTimeout:    durationEnv("API_PROCESS_TIMEOUT", 10*time.Minute),
-		DownloadTimeout:   durationEnv("API_DOWNLOAD_TIMEOUT", 10*time.Minute),
-		ShutdownTimeout:   durationEnv("API_SHUTDOWN_TIMEOUT", 15*time.Second),
-		ProcessorSocket:   env("API_PROCESSOR_SOCKET", "/run/aio-office/office.sock"),
-		ProcessorToken:    os.Getenv("API_PROCESSOR_TOKEN"),
+		Addr:               env("API_ADDR", ":8080"),
+		AllowedOrigins:     splitCSV(env("API_ALLOWED_ORIGINS", "http://localhost:4321")),
+		MetricsToken:       os.Getenv("API_METRICS_TOKEN"),
+		JobRoot:            env("API_JOB_ROOT", "/work/jobs"),
+		JobTTL:             durationEnv("API_JOB_TTL", 15*time.Minute),
+		MaxConcurrentJobs:  intEnv("API_MAX_CONCURRENT_JOBS", 1),
+		MaxQueuedJobs:      intEnv("API_MAX_QUEUED_JOBS", 8),
+		MaxUploadBytes:     int64Env("API_MAX_UPLOAD_BYTES", 262_144_000),
+		ProcessTimeout:     durationEnv("API_PROCESS_TIMEOUT", 10*time.Minute),
+		DownloadTimeout:    durationEnv("API_DOWNLOAD_TIMEOUT", 10*time.Minute),
+		ShutdownTimeout:    durationEnv("API_SHUTDOWN_TIMEOUT", 15*time.Second),
+		ProcessorTransport: env("API_PROCESSOR_TRANSPORT", "unix"),
+		ProcessorSocket:    env("API_PROCESSOR_SOCKET", "/run/aio-office/office.sock"),
+		ProcessorURL:       env("API_PROCESSOR_URL", ""),
+		ProcessorToken:     os.Getenv("API_PROCESSOR_TOKEN"),
 	}
 	return cfg, cfg.Validate()
 }
@@ -91,11 +95,35 @@ func (c Config) Validate() error {
 	if c.ShutdownTimeout <= 0 || c.ShutdownTimeout > time.Minute {
 		return fmt.Errorf("API_SHUTDOWN_TIMEOUT must be greater than zero and at most 1m")
 	}
-	if err := validateSafeAbsolutePath("API_PROCESSOR_SOCKET", c.ProcessorSocket); err != nil {
-		return err
+	transport := c.ProcessorTransport
+	if transport == "" {
+		transport = "unix"
 	}
-	if filepath.Ext(c.ProcessorSocket) != ".sock" {
-		return fmt.Errorf("API_PROCESSOR_SOCKET must end in .sock")
+	switch transport {
+	case "unix":
+		if err := validateSafeAbsolutePath("API_PROCESSOR_SOCKET", c.ProcessorSocket); err != nil {
+			return err
+		}
+		if filepath.Ext(c.ProcessorSocket) != ".sock" {
+			return fmt.Errorf("API_PROCESSOR_SOCKET must end in .sock")
+		}
+	case "tcp":
+		if err := validateProcessorURL(c.ProcessorURL); err != nil {
+			return err
+		}
+		if strings.TrimSpace(c.ProcessorToken) == "" {
+			return fmt.Errorf("API_PROCESSOR_TOKEN is required for tcp transport")
+		}
+	default:
+		return fmt.Errorf("API_PROCESSOR_TRANSPORT must be unix or tcp")
+	}
+	return nil
+}
+
+func validateProcessorURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return fmt.Errorf("API_PROCESSOR_URL must be an absolute http(s) URL without credentials, path, query, or fragment")
 	}
 	return nil
 }

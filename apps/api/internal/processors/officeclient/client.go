@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,9 @@ import (
 )
 
 type Config struct {
+	Transport      string
 	SocketPath     string
+	BaseURL        string
 	Token          string
 	MaxOutputBytes int64
 }
@@ -25,27 +28,52 @@ type Config struct {
 type Client struct {
 	httpClient     *http.Client
 	transport      *http.Transport
+	baseURL        *url.URL
 	token          string
 	maxOutputBytes int64
 }
 
 func New(cfg Config) (*Client, error) {
-	if !filepath.IsAbs(cfg.SocketPath) || filepath.Ext(cfg.SocketPath) != ".sock" {
-		return nil, fmt.Errorf("office processor socket must be an absolute .sock path")
-	}
 	if cfg.MaxOutputBytes <= 0 {
 		return nil, fmt.Errorf("office processor output limit must be positive")
 	}
-	dialer := &net.Dialer{}
-	transport := &http.Transport{
-		DisableCompression: true,
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return dialer.DialContext(ctx, "unix", cfg.SocketPath)
-		},
+	mode := cfg.Transport
+	if mode == "" {
+		mode = "unix"
+	}
+	var transport *http.Transport
+	var baseURL *url.URL
+	switch mode {
+	case "unix":
+		if !filepath.IsAbs(cfg.SocketPath) || filepath.Ext(cfg.SocketPath) != ".sock" {
+			return nil, fmt.Errorf("office processor socket must be an absolute .sock path")
+		}
+		dialer := &net.Dialer{}
+		transport = &http.Transport{
+			DisableCompression: true,
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				return dialer.DialContext(ctx, "unix", cfg.SocketPath)
+			},
+		}
+		baseURL, _ = url.Parse("http://office")
+	case "tcp":
+		if strings.TrimSpace(cfg.Token) == "" {
+			return nil, fmt.Errorf("office processor token is required for tcp transport")
+		}
+		parsed, err := url.Parse(cfg.BaseURL)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
+			return nil, fmt.Errorf("office processor URL must be an absolute http(s) URL without credentials, path, query, or fragment")
+		}
+		parsed.Path = ""
+		baseURL = parsed
+		transport = &http.Transport{DisableCompression: true}
+	default:
+		return nil, fmt.Errorf("office processor transport must be unix or tcp")
 	}
 	return &Client{
 		httpClient:     &http.Client{Transport: transport},
 		transport:      transport,
+		baseURL:        baseURL,
 		token:          cfg.Token,
 		maxOutputBytes: cfg.MaxOutputBytes,
 	}, nil
@@ -56,7 +84,7 @@ func (c *Client) ID() string { return tools.OfficeToPDFProcessor }
 func (c *Client) Close() { c.transport.CloseIdleConnections() }
 
 func (c *Client) Ready(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://office/healthz", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpoint("/healthz"), nil)
 	if err != nil {
 		return err
 	}
@@ -84,7 +112,7 @@ func (c *Client) Process(ctx context.Context, inputPath, outputPath string, repo
 	}
 
 	report(processing.Progress{Stage: "converting", Progress: nil, Message: "Converting the document in an isolated worker."})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://office/convert", input)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint("/convert"), input)
 	if err != nil {
 		return processing.NewFailure("processor_unavailable", "The document processor is unavailable.", err)
 	}
@@ -143,6 +171,17 @@ func (c *Client) Process(ctx context.Context, inputPath, outputPath string, repo
 	}
 	keep = true
 	return nil
+}
+
+func (c *Client) endpoint(path string) string {
+	if c.baseURL == nil {
+		return "http://office" + path
+	}
+	base := *c.baseURL
+	base.Path = path
+	base.RawQuery = ""
+	base.Fragment = ""
+	return base.String()
 }
 
 func workerFailure(response *http.Response) error {

@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -41,6 +42,12 @@ func TestConfigRejectsUnsafeValues(t *testing.T) {
 		"wrong socket ext": func(c *Config) {
 			c.ProcessorSocket = filepath.Join(t.TempDir(), "office.pipe")
 		},
+		"unknown processor transport": func(c *Config) { c.ProcessorTransport = "udp" },
+		"tcp missing URL":             func(c *Config) { c.ProcessorTransport = "tcp" },
+		"tcp malformed URL": func(c *Config) {
+			c.ProcessorTransport = "tcp"
+			c.ProcessorURL = "office-runner:8081"
+		},
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -50,5 +57,24 @@ func TestConfigRejectsUnsafeValues(t *testing.T) {
 				t.Fatal("expected validation error")
 			}
 		})
+	}
+}
+
+func TestConfigAcceptsTCPProcessorURL(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.ProcessorTransport = "tcp"
+	cfg.ProcessorURL = "http://office-runner:8081"
+	cfg.ProcessorToken = "secret"
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestConfigErrorsDoNotIncludeProcessorSecrets(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.ProcessorTransport = "tcp"
+	cfg.ProcessorURL = "https://user:secret@example.invalid"
+	if err := cfg.Validate(); err == nil || strings.Contains(err.Error(), "secret") {
+		t.Fatalf("unexpected validation result: %v", err)
 	}
 }

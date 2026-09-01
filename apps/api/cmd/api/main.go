@@ -26,7 +26,9 @@ func main() {
 	}
 
 	office, err := officeclient.New(officeclient.Config{
+		Transport:      cfg.ProcessorTransport,
 		SocketPath:     cfg.ProcessorSocket,
+		BaseURL:        cfg.ProcessorURL,
 		Token:          cfg.ProcessorToken,
 		MaxOutputBytes: cfg.MaxUploadBytes,
 	})

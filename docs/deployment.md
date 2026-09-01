@@ -70,6 +70,8 @@ Configure build variables separately for the production and preview triggers whe
 | `API_ADDR`                   | `:8080`                           | API listener inside Compose. The Compose port mapping remains bound to `127.0.0.1`.                      |
 | `API_METRICS_TOKEN`          | Inject from a secret manager      | Optional bearer token for trusted local metrics. Leave empty to disable `/metrics` with a 404 response.  |
 | `API_PROCESSOR_TOKEN`        | Inject from a secret manager      | Shared token for API-to-runner calls. Use a non-empty secret in staging and never commit it.             |
+| `API_PROCESSOR_TRANSPORT`    | `unix`                            | `unix` (default) or explicit `tcp` for a private-network runner.                                         |
+| `API_PROCESSOR_URL`          | `http://office-runner:8081`       | Required only for TCP mode; private HTTP(S) base URL without credentials or path.                        |
 | `API_JOB_ROOT`               | `/work/jobs`                      | Ephemeral API job root mounted as tmpfs by Compose.                                                      |
 | `API_JOB_TTL`                | `15m`                             | Job retention window; the API accepts at most `15m`.                                                     |
 | `API_PROCESS_TIMEOUT`        | `10m`                             | API job processing timeout; at most `15m`.                                                               |
@@ -87,8 +89,16 @@ Configure build variables separately for the production and preview triggers whe
 | `OFFICE_PROCESS_TIMEOUT`     | `10m`                             | Per-job LibreOffice timeout; at most `15m`.                                                              |
 | `OFFICE_MAX_CONCURRENT_JOBS` | `1`                               | Default runner concurrency. Higher values do not replace process and container isolation.                |
 | `OFFICE_SHUTDOWN_TIMEOUT`    | `15s`                             | Runner cleanup window during shutdown; at most `1m`.                                                     |
+| `OFFICE_TRANSPORT`           | `unix`                            | `unix` (default) or explicit `tcp`; TCP requires `OFFICE_PROCESSOR_TOKEN`.                               |
+| `OFFICE_ADDR`                | `:8081`                           | TCP listener address, used only when `OFFICE_TRANSPORT=tcp`.                                             |
 
 `compose.yaml` passes `API_PROCESSOR_TOKEN` to the office runner as `OFFICE_PROCESSOR_TOKEN`. Use one injected shared value; do not create or commit a second plaintext token.
+
+Unix sockets are the default transport. A separate private-network deployment
+may opt into TCP with `API_PROCESSOR_TRANSPORT=tcp`,
+`API_PROCESSOR_URL=http://office-runner:8081`, `OFFICE_TRANSPORT=tcp`, and
+`OFFICE_ADDR=:8081`. TCP requires a non-empty shared processor token and must
+remain private; the existing Compose service continues to use Unix mode.
 
 ## 2. Build and deploy the static frontend
 

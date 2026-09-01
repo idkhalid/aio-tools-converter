@@ -10,6 +10,8 @@ import (
 )
 
 type Config struct {
+	Transport      string
+	Addr           string
 	SocketPath     string
 	JobRoot        string
 	LibreOfficeBin string
@@ -23,6 +25,8 @@ type Config struct {
 
 func LoadConfig() (Config, error) {
 	cfg := Config{
+		Transport:      officeEnv("OFFICE_TRANSPORT", "unix"),
+		Addr:           officeEnv("OFFICE_ADDR", ":8081"),
 		SocketPath:     officeEnv("OFFICE_SOCKET_PATH", "/run/aio-office/office.sock"),
 		JobRoot:        officeEnv("OFFICE_JOB_ROOT", "/work/office-jobs"),
 		LibreOfficeBin: officeEnv("LIBREOFFICE_BIN", "soffice"),
@@ -37,8 +41,24 @@ func LoadConfig() (Config, error) {
 }
 
 func (c Config) Validate() error {
-	if !filepath.IsAbs(c.SocketPath) || filepath.Ext(c.SocketPath) != ".sock" {
-		return fmt.Errorf("OFFICE_SOCKET_PATH must be an absolute .sock path")
+	transport := c.Transport
+	if transport == "" {
+		transport = "unix"
+	}
+	switch transport {
+	case "unix":
+		if !filepath.IsAbs(c.SocketPath) || filepath.Ext(c.SocketPath) != ".sock" {
+			return fmt.Errorf("OFFICE_SOCKET_PATH must be an absolute .sock path")
+		}
+	case "tcp":
+		if strings.TrimSpace(c.Addr) == "" {
+			return fmt.Errorf("OFFICE_ADDR must not be empty")
+		}
+		if strings.TrimSpace(c.Token) == "" {
+			return fmt.Errorf("OFFICE_PROCESSOR_TOKEN is required for tcp transport")
+		}
+	default:
+		return fmt.Errorf("OFFICE_TRANSPORT must be unix or tcp")
 	}
 	if !filepath.IsAbs(c.JobRoot) || filepath.Dir(filepath.Clean(c.JobRoot)) == filepath.Clean(c.JobRoot) {
 		return fmt.Errorf("OFFICE_JOB_ROOT must be an absolute non-root path")

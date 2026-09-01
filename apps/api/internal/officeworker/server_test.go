@@ -152,6 +152,51 @@ func TestWorkerStartupScavengerPreservesUnexpectedChildren(t *testing.T) {
 	}
 }
 
+func TestWorkerTransportConfiguration(t *testing.T) {
+	t.Run("default unix", func(t *testing.T) {
+		cfg := workerConfigForTest(t)
+		if err := cfg.Validate(); err != nil {
+			t.Fatal(err)
+		}
+		listener, err := Listen(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer listener.Close()
+		defer os.Remove(cfg.SocketPath)
+		if listener.Addr().Network() != "unix" {
+			t.Fatalf("listener network = %s", listener.Addr().Network())
+		}
+	})
+	t.Run("explicit tcp requires token", func(t *testing.T) {
+		cfg := workerConfigForTest(t)
+		cfg.Transport = "tcp"
+		cfg.Addr = "127.0.0.1:0"
+		if err := cfg.Validate(); err == nil {
+			t.Fatal("TCP configuration without token was accepted")
+		}
+		cfg.Token = "secret"
+		if err := cfg.Validate(); err != nil {
+			t.Fatal(err)
+		}
+		listener, err := Listen(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer listener.Close()
+		if listener.Addr().Network() != "tcp" {
+			t.Fatalf("listener network = %s", listener.Addr().Network())
+		}
+	})
+	t.Run("unknown transport rejected", func(t *testing.T) {
+		cfg := workerConfigForTest(t)
+		cfg.Transport = "udp"
+		if err := cfg.Validate(); err == nil {
+			t.Fatal("unknown transport was accepted")
+		}
+	})
+}
+
 func TestMinimalEnvironmentDoesNotPassArbitrarySecrets(t *testing.T) {
 	t.Setenv("TOP_SECRET_VALUE", "must-not-reach-libreoffice")
 	environment := strings.Join(minimalEnvironment("/job/home", "/job/tmp"), "\n")

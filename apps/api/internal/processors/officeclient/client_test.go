@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,6 +116,79 @@ func TestClientReadinessUsesWorkerHealthEndpoint(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("worker health endpoint was not called")
+	}
+}
+
+func TestClientTCPTransportHealthConversionAndAuthentication(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/convert" && r.Header.Get("Authorization") != "Bearer tcp-secret" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/healthz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, `{"status":"ok"}`)
+		case "/convert":
+			_, _ = io.Copy(io.Discard, r.Body)
+			w.Header().Set("Content-Type", "application/pdf")
+			_, _ = w.Write(clientTestPDF)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client, err := New(Config{Transport: "tcp", BaseURL: server.URL, Token: "tcp-secret", MaxOutputBytes: 1024})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	if err := client.Ready(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "input.docx")
+	outputPath := filepath.Join(dir, "output.pdf")
+	if err := os.WriteFile(inputPath, []byte("input"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Process(context.Background(), inputPath, outputPath, func(_ processing.Progress) {}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(outputPath); err != nil || string(got) != string(clientTestPDF) {
+		t.Fatalf("output mismatch: %v", err)
+	}
+}
+
+func TestClientRejectsInvalidTransportAndURLWithoutFallback(t *testing.T) {
+	tests := []Config{
+		{Transport: "udp", MaxOutputBytes: 1},
+		{Transport: "tcp", BaseURL: "office-runner:8081", MaxOutputBytes: 1},
+		{Transport: "tcp", BaseURL: "http://office-runner:8081/private", MaxOutputBytes: 1},
+		{Transport: "tcp", BaseURL: "http://office-runner:8081", MaxOutputBytes: 1},
+	}
+	for _, cfg := range tests {
+		if _, err := New(cfg); err == nil {
+			t.Fatalf("configuration unexpectedly accepted: %+v", cfg)
+		}
+	}
+	client, err := New(Config{Transport: "tcp", BaseURL: "http://127.0.0.1:1", Token: "secret", MaxOutputBytes: 1024})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	if err := client.Ready(context.Background()); err == nil {
+		t.Fatal("unreachable TCP worker unexpectedly became ready")
+	}
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "input.docx")
+	if err := os.WriteFile(inputPath, []byte("input"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err = client.Process(context.Background(), inputPath, filepath.Join(dir, "output.pdf"), func(_ processing.Progress) {})
+	var failure *processing.Failure
+	if !errors.As(err, &failure) || failure.Code != "processor_unavailable" {
+		t.Fatalf("unreachable TCP worker returned %v", err)
 	}
 }
 
